@@ -32,8 +32,8 @@ El sistema sigue un flujo de control centralizado en el Backend, donde el dispos
 1.  **Captura:** El **ESP32-CAM** toma la foto en la puerta y la envía vía HTTP POST a la API de Laravel.
 2.  **Pre-procesamiento:** **Laravel** recibe la imagen, la procesa (convertir a Base64/Almacenamiento temporal) y prepara los argumentos para el análisis.
 3.  **Reconocimiento (AI):** Laravel invoca un subproceso ejecutando el script de **Python**. Este script recibe la imagen, realiza la comparación biométrica y devuelve el ID del usuario identificado.
-4.  **Validación Administrativa:** Simultáneamente (o secuencialmente), Laravel consulta la API externa **Cronode** para verificar si ese usuario tiene programación académica válida en ese ambiente y hora específica.
-5.  **Decisión:** Laravel cruza los datos (¿Es quien dice ser? + ¿Tiene permiso ahora?).
+4.  **Validación Administrativa:** Simultáneamente (o secuencialmente), Laravel consulta la API externa **Cronode** para realizar el cambio de estado del ambiente.
+5.  **Decisión:** Laravel cruza los datos (¿Es quien dice ser?).
 6.  **Respuesta:** Laravel envía una respuesta JSON (`{access: true}`) al ESP32.
 7.  **Acción:** El ESP32 procesa la respuesta y activa el servomotor si el acceso es concedido.
 
