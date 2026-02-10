@@ -24,7 +24,6 @@ El sistema no solo controla la apertura física de puertas mediante dispositivos
 
 ---
 
-## 🛠️ Arquitectura del Sistema
 
 ## 🔄 Flujo de Datos y Arquitectura
 
