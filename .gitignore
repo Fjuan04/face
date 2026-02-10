@@ -22,3 +22,10 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Ignorar entornos virtuales de Python
+venv/
+env/
+.env
+__pycache__/
+*.pyc
