@@ -1,8 +1,8 @@
 # FACE (Flujo de Ambientes Controlados Electrónicamente)
 
 ![Status](https://img.shields.io/badge/Status-En_Desarrollo-yellow)
-![Laravel](https://img.shields.io/badge/Backend-Laravel_11-red)
-![React](https://img.shields.io/badge/Frontend-React_18-blue)
+![Laravel](https://img.shields.io/badge/Backend-Laravel_12-red)
+![React](https://img.shields.io/badge/Frontend-React_19-blue)
 ![Python](https://img.shields.io/badge/AI-Python_3-3776AB)
 ![IoT](https://img.shields.io/badge/Hardware-ESP32-green)
 
