@@ -26,19 +26,52 @@ El sistema no solo controla la apertura física de puertas mediante dispositivos
 
 ## 🛠️ Arquitectura del Sistema
 
-El sistema opera bajo una arquitectura de microservicios híbrida:
+## 🔄 Flujo de Datos y Arquitectura
 
-1.  **Frontend (React):** Interfaz de usuario para la captura de fotos y visualización del mapa.
-2.  **Backend (Laravel API):** Orquestador central. Maneja la autenticación (Sanctum), base de datos y reglas de negocio.
-3.  **Microservicio AI (Python):** Scripting ejecutado desde el backend para procesar vectores biométricos.
-4.  **Hardware (IoT):** Dispositivos ESP32 que reciben órdenes de apertura vía HTTP/WebSocket.
+El sistema sigue un flujo de control centralizado en el Backend, donde el dispositivo IoT actúa como cliente y el servidor procesa la lógica pesada.
+
+1.  **Captura:** El **ESP32-CAM** toma la foto en la puerta y la envía vía HTTP POST a la API de Laravel.
+2.  **Pre-procesamiento:** **Laravel** recibe la imagen, la procesa (convertir a Base64/Almacenamiento temporal) y prepara los argumentos para el análisis.
+3.  **Reconocimiento (AI):** Laravel invoca un subproceso ejecutando el script de **Python**. Este script recibe la imagen, realiza la comparación biométrica y devuelve el ID del usuario identificado.
+4.  **Validación Administrativa:** Simultáneamente (o secuencialmente), Laravel consulta la API externa **Cronode** para verificar si ese usuario tiene programación académica válida en ese ambiente y hora específica.
+5.  **Decisión:** Laravel cruza los datos (¿Es quien dice ser? + ¿Tiene permiso ahora?).
+6.  **Respuesta:** Laravel envía una respuesta JSON (`{access: true}`) al ESP32.
+7.  **Acción:** El ESP32 procesa la respuesta y activa el servomotor si el acceso es concedido.
 
 ```mermaid
-graph TD
-    User[Usuario/Cámara] -->|HTTPS| Frontend[React App]
-    Frontend -->|API REST| Backend[Laravel API]
-    Backend -->|Consulta| Cronode[API Externa Cronode]
-    Backend -->|Ejecuta| Python[Script Python AI]
-    Python -->|Valida| Models[Modelos Biométricos]
-    Backend -->|Orden Apertura| ESP32[Módulo IoT]
-    ESP32 -->|Acciona| Servo[Cerradura Puerta]
+sequenceDiagram
+    participant Hardware as ESP32-CAM (Puerta)
+    participant Backend as Laravel API
+    participant AI as Script Python
+    participant Cronode as API Cronode
+    participant DB as Base de Datos
+
+    Note over Hardware: Detecta persona<br/>y toma foto
+    Hardware->>Backend: POST /api/access-request (Imagen)
+    activate Backend
+    
+    Note right of Backend: Procesa Imagen<br/>(Base64/Temp)
+    
+    Backend->>AI: Ejecuta Script (Argumentos)
+    activate AI
+    AI-->>Backend: Retorna: ID Usuario / Match
+    deactivate AI
+
+    alt Usuario No Reconocido
+        Backend-->>Hardware: Respuesta: {access: false, msg: "Desconocido"}
+    else Usuario Reconocido
+        Backend->>Cronode: GET /validate-schedule (User, Room)
+        activate Cronode
+        Cronode-->>Backend: Retorna: Autorizado / Denegado
+        deactivate Cronode
+        
+        Backend->>DB: Registra Intento de Acceso (Log)
+        
+        alt Permiso Válido
+            Backend-->>Hardware: Respuesta: {access: true}
+            Hardware->>Hardware: Mover Servo (Abrir)
+        else Permiso Inválido
+            Backend-->>Hardware: Respuesta: {access: false, msg: "Sin clase"}
+        end
+    end
+    deactivate Backend
