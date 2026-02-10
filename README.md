@@ -1,59 +1,44 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# FACE (Flujo de Ambientes Controlados Electrónicamente)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+![Status](https://img.shields.io/badge/Status-En_Desarrollo-yellow)
+![Laravel](https://img.shields.io/badge/Backend-Laravel_11-red)
+![React](https://img.shields.io/badge/Frontend-React_18-blue)
+![Python](https://img.shields.io/badge/AI-Python_3-3776AB)
+![IoT](https://img.shields.io/badge/Hardware-ESP32-green)
 
-## About Laravel
+> **Modernización del control de acceso institucional mediante validación biométrica y gestión en tiempo real.**
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## 📖 Descripción
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+**FACE** es un ecosistema integral de hardware y software diseñado para automatizar la gestión de ambientes de formación. El proyecto elimina la dependencia de llaves físicas, sustituyéndolas por un sistema de **Reconocimiento Facial** impulsado por Inteligencia Artificial.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+El sistema no solo controla la apertura física de puertas mediante dispositivos IoT, sino que ofrece una interfaz de administración basada en una **vista aérea (tipo dron)** para monitorear en tiempo real la ocupación y disponibilidad de los salones, integrándose directamente con la plataforma institucional **Cronode**.
 
-## Learning Laravel
+### 🚀 Características Principales
+* **Acceso Biométrico:** Validación de identidad mediante visión artificial (Python + OpenCV/Dlib) con detección de prueba de vida.
+* **Gestión Visual de Ambientes:** Dashboard en React con mapa interactivo aéreo para visualizar el estado de las aulas.
+* **Integración Hardware IoT:** Comunicación con microcontroladores ESP32 y servomotores para el accionamiento físico de cerraduras.
+* **Conexión con Cronode:** Validación de permisos basada en la programación académica trimestral oficial.
+* **Logs y Trazabilidad:** Registro histórico inmutable de ingresos y salidas.
+* **Infraestructura Híbrida:** Despliegue en servidor virtualizado (Proxmox) con acceso seguro vía Cloudflare Tunnel.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+---
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## 🛠️ Arquitectura del Sistema
 
-## Laravel Sponsors
+El sistema opera bajo una arquitectura de microservicios híbrida:
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+1.  **Frontend (React):** Interfaz de usuario para la captura de fotos y visualización del mapa.
+2.  **Backend (Laravel API):** Orquestador central. Maneja la autenticación (Sanctum), base de datos y reglas de negocio.
+3.  **Microservicio AI (Python):** Scripting ejecutado desde el backend para procesar vectores biométricos.
+4.  **Hardware (IoT):** Dispositivos ESP32 que reciben órdenes de apertura vía HTTP/WebSocket.
 
-### Premium Partners
-
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```mermaid
+graph TD
+    User[Usuario/Cámara] -->|HTTPS| Frontend[React App]
+    Frontend -->|API REST| Backend[Laravel API]
+    Backend -->|Consulta| Cronode[API Externa Cronode]
+    Backend -->|Ejecuta| Python[Script Python AI]
+    Python -->|Valida| Models[Modelos Biométricos]
+    Backend -->|Orden Apertura| ESP32[Módulo IoT]
+    ESP32 -->|Acciona| Servo[Cerradura Puerta]
