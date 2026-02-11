@@ -17,7 +17,8 @@ return new class extends Migration
             $table->string('surname');
             $table->string('password');
             $table->string('email')->unique();
-            $table->foreignId('role_id')->default(2);
+            $table->unsignedBigInteger('role_id');
+            $table->foreign('role_id')->references('id')->on('roles')->default(2);
             $table->boolean('is_active')->default(1);
             $table->text('photo')->nullable();
             $table->timestamp('email_verified_at')->nullable();
