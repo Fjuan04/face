@@ -10,3 +10,11 @@ Route::get('/user', function (Request $request) {
 Route::get('ping', function () {
     return 'hola companero';
 }); 
+
+Route::get('prueba', function (Request $request){
+    return 'hola';
+})->middleware('auth:sanctum');
+
+Route::get('PERRO', function(){
+    return 'hola cerdo';
+})->name('login');
