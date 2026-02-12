@@ -7,9 +7,24 @@ import mysql.connector
 from datetime import datetime, timedelta
 import sys
 import json
+from dotenv import load_dotenv
 
-# Configuración
-REGISTRO_PATH = "rostros/"
+# Configuración de rutas y parámetros
+# BASE_DIR apunta a la raíz del proyecto Laravel.
+# Estructura:
+#   face/
+#     services/face-recognition/src/reconocer.py  (este archivo)
+# Subimos tres niveles: src -> face-recognition -> services -> face
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+
+# Cargar variables de entorno desde el .env de Laravel (ubicado en la raíz del proyecto)
+ENV_PATH = os.path.join(BASE_DIR, ".env")
+load_dotenv(ENV_PATH)
+
+# Carpeta donde Laravel guarda las fotos de docentes (disco local privado)
+# => face/storage/app/private/faces
+REGISTRO_PATH = os.path.join(BASE_DIR, "storage", "app", "private", "faces")
+
 DISPOSITIVO_ID = 1  # ID del dispositivo ESP32-CAM en tu tabla
 UMBRAL_SIMILITUD = 0.6  # Ajusta según necesidades (menor = más estricto)
 TIEMPO_MINIMO_ENTRE_EVENTOS = timedelta(minutes=1)  # 1 minuto mínimo entre entrada y salida
@@ -37,17 +52,36 @@ def log_end(message):
 # Inicializar detectores de Dlib
 log_message("Inicializando detectores de Dlib")
 detector = dlib.get_frontal_face_detector()
-shape_predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
-face_recognizer = dlib.face_recognition_model_v1("dlib_face_recognition_resnet_model_v1.dat")
+
+# Rutas a los modelos de Dlib (asumimos que están en services/face-recognition/models)
+MODELS_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
+SHAPE_PREDICTOR_PATH = os.path.join(MODELS_DIR, "shape_predictor_68_face_landmarks.dat")
+FACE_RECOGNIZER_PATH = os.path.join(MODELS_DIR, "dlib_face_recognition_resnet_model_v1.dat")
+
+log_message(f"Usando SHAPE_PREDICTOR_PATH: {SHAPE_PREDICTOR_PATH}")
+log_message(f"Usando FACE_RECOGNIZER_PATH: {FACE_RECOGNIZER_PATH}")
+
+shape_predictor = dlib.shape_predictor(SHAPE_PREDICTOR_PATH)
+face_recognizer = dlib.face_recognition_model_v1(FACE_RECOGNIZER_PATH)
 log_message("Detectores de Dlib inicializados correctamente")
 
-# Conexión a MySQL
-log_message("Estableciendo conexión con MySQL")
+# Conexión a MySQL (leyendo de variables de entorno, alineadas con el .env de Laravel)
+log_message("Estableciendo conexión con MySQL usando variables de entorno")
+
+db_host = os.environ.get("DB_HOST")
+db_user = os.environ.get("DB_USERNAME")
+db_password = os.environ.get("DB_PASSWORD")
+db_name = os.environ.get("DB_DATABASE")
+db_port = int(os.environ.get("DB_PORT"))
+
+log_message(f"DB_HOST={db_host}, DB_NAME={db_name}, DB_USER={db_user}, DB_PORT={db_port}")
+
 conn = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="",
-    database="control_facial"
+    host=db_host,
+    user=db_user,
+    password=db_password,
+    database=db_name,
+    port=db_port,
 )
 cursor = conn.cursor()
 log_message("Conexión a MySQL establecida correctamente")
@@ -87,11 +121,16 @@ def obtener_descriptor_rostro(imagen_path):
         return {'error_code': 'PROCESSING_ERROR', 'message': error_msg}
 
 def cargar_rostros_conocidos():
-    """Carga los rostros registrados desde la base de datos"""
-    log_message("Cargando rostros conocidos desde la base de datos")
-    cursor.execute("SELECT id, nombre, foto FROM personas WHERE activo = 1")
+    """Carga los rostros registrados desde la base de datos (tabla users de Laravel)"""
+    log_message("Cargando rostros conocidos desde la tabla users")
+    # Mapeo a esquema Laravel:
+    # - id       -> id
+    # - nombre   -> name
+    # - foto     -> photo (ruta relativa en storage/app/private/faces)
+    # - activo   -> is_active
+    cursor.execute("SELECT id, name, photo FROM users WHERE is_active = 1")
     personas = cursor.fetchall()
-    log_message(f"Personas encontradas en la base de datos: {len(personas)}")
+    log_message(f"Usuarios activos encontrados en la base de datos: {len(personas)}")
     
     descriptores = []
     ids = []
@@ -99,16 +138,17 @@ def cargar_rostros_conocidos():
     
     for persona in personas:
         try:
-            nombre_archivo_foto = persona[2]
-            log_message(f"Procesando persona: {persona[1]} con foto: {nombre_archivo_foto}")
+            nombre_archivo_foto = persona[2]  # users.photo
+            log_message(f"Procesando usuario: {persona[1]} con foto(ruta): {nombre_archivo_foto}")
             
-            if not (nombre_archivo_foto.lower().endswith('.jpg') or \
-                    nombre_archivo_foto.lower().endswith('.jpeg') or \
-                    nombre_archivo_foto.lower().endswith('.png')):
-                nombre_archivo_foto += '.jpg'
-                log_message(f"Extensión ajustada para: {nombre_archivo_foto}")
-            
-            img_path = os.path.join(REGISTRO_PATH, nombre_archivo_foto)
+            # En Laravel guardamos la ruta relativa (por ejemplo: "faces/archivo.jpg") en users.photo.
+            # Si la ruta ya es relativa, la combinamos con REGISTRO_PATH, que apunta a storage/app/private/faces.
+            # Si la ruta incluye "faces/", evitamos duplicarlo.
+            rel_path = nombre_archivo_foto.lstrip("/\\")
+            if rel_path.startswith("faces/") or rel_path.startswith("faces\\"):
+                rel_path = rel_path.split("/", 1)[-1].split("\\", 1)[-1]
+
+            img_path = os.path.join(REGISTRO_PATH, rel_path)
             log_message(f"Ruta completa de la imagen: {img_path}")
             
             descriptor_result = obtener_descriptor_rostro(img_path)
@@ -127,11 +167,20 @@ def cargar_rostros_conocidos():
     return descriptores, ids, nombres
 
 def verificar_ultimo_evento(persona_id):
-    """Verifica el último evento de la persona y determina la acción apropiada"""
+    """Verifica el último evento del usuario en la tabla events (Laravel) y determina la acción apropiada"""
     try:
+        # events: id, user_id, device_id, ambient_id, event_type, timestamps
         cursor.execute(
-            "SELECT tipo, fecha FROM eventos WHERE persona_id = %s  AND tipo ='entrada' OR tipo ='SALIDA' ORDER BY fecha DESC LIMIT 1",
-            (persona_id,)
+            """
+            SELECT event_type, created_at
+            FROM events
+            WHERE user_id = %s
+              AND device_id = %s
+              AND event_type IN ('entry', 'exit')
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (persona_id, DISPOSITIVO_ID),
         )
         ultimo_evento = cursor.fetchone()
         
@@ -142,13 +191,13 @@ def verificar_ultimo_evento(persona_id):
         ahora = datetime.now()
         diferencia = ahora - fecha_ultimo
         
-        if tipo_ultimo == 'entrada':
+        if tipo_ultimo == 'entry':
             if diferencia >= TIEMPO_MINIMO_ENTRE_EVENTOS:
-                return 'salida'  # Ha pasado suficiente tiempo, permitir salida
+                return 'salida'  # Ha pasado suficiente tiempo, permitir salida (mantenemos etiqueta en español)
             else:
                 tiempo_restante = TIEMPO_MINIMO_ENTRE_EVENTOS - diferencia
                 return f'salida_no_valida_{tiempo_restante.total_seconds()}'
-        elif tipo_ultimo == 'salida':
+        elif tipo_ultimo == 'exit':
             if diferencia >= TIEMPO_MINIMO_ENTRE_EVENTOS:
                 return 'entrada'  # Ha pasado suficiente tiempo, permitir entrada
             else:
@@ -162,7 +211,7 @@ def verificar_ultimo_evento(persona_id):
         return 'entrada'  # Por defecto registrar entrada si hay error
 
 def registrar_evento(persona_id, tipo, detalles=None):
-    """Registra un evento en la base de datos con verificación de tiempo mínimo"""
+    """Registra un evento en la tabla events de Laravel con verificación de tiempo mínimo"""
     try:
         if persona_id is not None:
             accion = verificar_ultimo_evento(persona_id)
@@ -177,12 +226,8 @@ def registrar_evento(persona_id, tipo, detalles=None):
                 
                 
                 
-                cursor.execute(
-                    "INSERT INTO eventos (persona_id, tipo, fecha, detalles) VALUES (%s, %s, %s, %s)",
-                    (persona_id, 'salida_no_valida', datetime.now(), mensaje)
-                )
-                conn.commit()
-                
+                # En el esquema Laravel no tenemos tipos de evento 'salida_no_valida',
+                # así que solo devolvemos el error sin insertar nada en la tabla events.
                 return {
                     'error': mensaje,
                     'error_code': 'MIN_TIME_NOT_MET',
@@ -198,12 +243,7 @@ def registrar_evento(persona_id, tipo, detalles=None):
                 mensaje = f"Entrada no válida. Tiempo mínimo no cumplido. Espere {minutos} min {segundos} seg"
                 log_message(mensaje)
                 
-                cursor.execute(
-                    "INSERT INTO eventos (persona_id, tipo, fecha, detalles) VALUES (%s, %s, %s, %s)",
-                    (persona_id, 'entrada_no_valida', datetime.now(), mensaje)
-                )
-                conn.commit()
-                
+                # Igual que arriba, no insertamos en events para este caso.
                 return {
                     'error': mensaje,
                     'error_code': 'MIN_TIME_NOT_MET',
@@ -212,16 +252,29 @@ def registrar_evento(persona_id, tipo, detalles=None):
                     'accion_permitida': 'salida'
                 }
             
-            tipo = accion  # Usar el tipo determinado por la verificación
+            tipo = accion  # Usar el tipo determinado por la verificación ('entrada' / 'salida')
         
-        log_message(f"Registrando evento - Tipo: {tipo}, Persona ID: {persona_id}, Detalles: {detalles}")
+        # Mapear el tipo usado en el script ('entrada' / 'salida') a event_type de Laravel ('entry' / 'exit')
+        if tipo == 'entrada':
+            event_type = 'entry'
+        elif tipo == 'salida':
+            event_type = 'exit'
+        else:
+            # Por defecto, si llega algo distinto, registramos como entry.
+            event_type = 'entry'
+
+        log_message(f"Registrando evento en tabla events - event_type: {event_type}, user_id: {persona_id}, detalles: {detalles}")
+        ahora = datetime.now()
         cursor.execute(
-            "INSERT INTO eventos (persona_id, tipo, fecha, detalles) VALUES (%s, %s, %s, %s)",
-            (persona_id, tipo, datetime.now(), detalles)
+            """
+            INSERT INTO events (user_id, device_id, ambient_id, event_type, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (persona_id, DISPOSITIVO_ID, 1, event_type, ahora, ahora),
         )
         conn.commit()
-        log_message("Evento registrado correctamente en la base de datos")
-        return {'success': True, 'tipo': tipo}
+        log_message("Evento registrado correctamente en la tabla events")
+        return {'success': True, 'tipo': event_type}
         
     except Exception as e:
         log_message(f"Error al registrar evento: {e}")
