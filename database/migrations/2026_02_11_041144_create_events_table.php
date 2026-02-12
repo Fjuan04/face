@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::create('events', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id');
-            $table->foreignId('device_id');
+            $table->foreignId('user_id')->constrained();
+            $table->foreignId('device_id')->constrained();
             $table->integer('ambient_id')->unsigned();
             $table->enum('event_type', ['opening','entry','exit', 'closing']);
             $table->timestamps();

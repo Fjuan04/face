@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('ambient_assignments', function (Blueprint $table) {
             $table->id();
             $table->integer('ambient_id')->unsigned();
-            $table->foreignId('user_id');
+            $table->foreignId('user_id')->constrained();
             $table->foreignId('assigned_by')->references('id')->on('users');
             $table->enum('status',['in_progress','closing','finished'])->default('in_progress');
             $table->timestamp('start_time')->useCurrent();
