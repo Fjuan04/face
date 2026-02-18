@@ -123,6 +123,7 @@ class FaceRecognitionController extends Controller
             $this->logMessage("Comando a ejecutar: {$comando}");
 
             $salida = shell_exec($comando);
+            
             $this->logMessage("Salida cruda del comando Python:\n" . (string) $salida);
 
             if ($archivoTemp && file_exists($archivoTemp)) {
