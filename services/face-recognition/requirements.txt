@@ -1,5 +1,5 @@
 opencv-python
-dlib
+dlib (dlib-bin) -> dlib precompilado para versiones 3.12 de python 
 numpy
 mysql-connector-python
 python-dotenv
