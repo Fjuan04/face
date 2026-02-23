@@ -3,29 +3,21 @@
 #include "esp_camera.h"
 
 // ╔════════════════════════════════════════════════════════════════╗
-// ║       ESP32-CAM RECONOCIMIENTO FACIAL v2.0                     ║
-// ║       FACE - Sistema de Control de Acceso Biométrico           ║
-// ║       Adaptado para Laravel con Reconocimiento Facial          ║
-// ╚════════════════════════════════════════════════════════════════╝
-
-// ╔════════════════════════════════════════════════════════════════╗
-// ║              VARIABLES CONFIGURABLES                           ║
-// ║         ⚠ EDITA ESTOS VALORES SEGÚN TU ENTORNO ⚠             ║
+// ║       ESP32-CAM RECONOCIMIENTO FACIAL v1.0                     ║
+// ║       SENA - Sistema de Control de Acceso                      ║
 // ╚════════════════════════════════════════════════════════════════╝
 
 // --- CONFIGURACIÓN WIFI ---
-const char* WIFI_SSID = "Funcionarios";           // Tu SSID WiFi
-const char* WIFI_PASSWORD = "SomosSena_2025";     // Tu contraseña WiFi
+const char* ssid = "Funcionarios";
+const char* password = "SomosSena_2025";
 
-// --- CONFIGURACIÓN SERVIDOR LARAVEL ---
-const char* SERVER_IP = "192.168.1.100";          // IP del servidor Laravel
-const int SERVER_PORT = 8000;                     // Puerto del servidor (8000 para php artisan serve, 80 para producción)
-const char* SERVER_URL = "/api/recognize";        // Endpoint API (sin trailing slash)
+// --- CONFIGURACIÓN SERVIDOR ---
+const char* serverUrl = "http://10.2.13.193/face-vanilla-v2/server/index.php";
 
 // --- INFORMACIÓN DEL SISTEMA ---
-const char* VERSION = "2.0";
-const char* FECHA_VERSION = "23/02/2026";
-const char* AUTOR = "FACE - Sistema de Control de Acceso Biométrico";
+const char* VERSION = "1.0";
+const char* FECHA_VERSION = "16/02/2026";
+const char* AUTOR = "SENA - Centro de Procesos Industriales y Construccion";
 
 // --- PINES ESP32-CAM (AI-THINKER) ---
 #define PWDN_GPIO_NUM     32
