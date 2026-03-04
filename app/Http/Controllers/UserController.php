@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-
+use Illuminate\Support\Facades\Http;
 class UserController extends Controller
 {
     /**
@@ -30,6 +30,8 @@ class UserController extends Controller
      */
     public function store(Request $request)
     {
+
+        
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'surname' => ['required', 'string', 'max:255'],
@@ -46,8 +48,8 @@ class UserController extends Controller
             'name' => $validated['name'],
             'surname' => $validated['surname'],
             'email' => $validated['email'],
-            'password' => $validated['password'], 
-            'role_id' => 2, 
+            'password' => $validated['password'],
+            'role_id' => 2,
             'is_active' => true,
             'photo' => $photoPath,
         ]);
