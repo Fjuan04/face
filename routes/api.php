@@ -22,3 +22,5 @@ Route::middleware('auth:sanctum')->group(function () {
 // Endpoint API para reconocimiento facial (NO protegido, usado por ESP32/pruebas)
 Route::post('recognize', [FaceRecognitionController::class, 'process'])
     ->name('api.recognize');
+
+Route::get('test', fn()=> response()->json(['message'=>'testing']));
