@@ -8,11 +8,11 @@
 // ╚════════════════════════════════════════════════════════════════╝
 
 // --- CONFIGURACIÓN WIFI ---
-const char* ssid = "Funcionarios";
-const char* password = "SomosSena_2025";
+const char* ssid = "SSID";
+const char* password = "PASSWORD";
 
 // --- CONFIGURACIÓN SERVIDOR ---
-const char* serverUrl = "http://10.2.13.193/face-vanilla-v2/server/index.php";
+const char* serverUrl = "URL_API";
 
 // --- INFORMACIÓN DEL SISTEMA ---
 const char* VERSION = "1.0";
