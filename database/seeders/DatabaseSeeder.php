@@ -23,11 +23,10 @@ class DatabaseSeeder extends Seeder
 
         Role::create([
             "name"=> "docent",
-        ]);    
+        ]);
 
         User::create([
-            'name' => 'super',
-            'surname' => 'admin',
+            'fullname' => 'super',
             'password' => 'admin',
             'email' => 'admin@gmail.com',
             'role_id'=> 1

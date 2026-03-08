@@ -172,13 +172,10 @@
             <form id="docente-form" method="POST" enctype="multipart/form-data" action="{{ route('docentes.store') }}">
                 @csrf
                 <div class="field">
-                    <label for="name">Nombre</label>
-                    <input type="text" id="name" name="name" value="{{ old('name') }}" required>
+                    <label for="fullname">Nombre Completo</label>
+                    <input type="text" id="fullname" name="fullname" value="{{ old('fullname') }}" required>
                 </div>
-                <div class="field">
-                    <label for="surname">Apellido</label>
-                    <input type="text" id="surname" name="surname" value="{{ old('surname') }}" required>
-                </div>
+
                 <div class="field">
                     <label for="email">Correo institucional</label>
                     <input type="email" id="email" name="email" value="{{ old('email') }}" required>
@@ -186,6 +183,10 @@
                 <div class="field">
                     <label for="password">Contraseña (para pruebas)</label>
                     <input type="password" id="password" name="password" required>
+                </div>
+                <div class="field">
+                    <label for="password_confirmation">Confirmar contraseña</label>
+                    <input type="password" id="password_confirmation" name="password_confirmation" required>
                 </div>
                 <input type="file" id="photo-input" name="photo" accept="image/*" class="hidden" style="display:none;">
 
@@ -333,10 +334,10 @@
                 const csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');
 
                 formData.append('_token', csrfToken);
-                formData.append('name', document.getElementById('name').value);
-                formData.append('surname', document.getElementById('surname').value);
+                formData.append('fullname', document.getElementById('fullname').value);
                 formData.append('email', document.getElementById('email').value);
                 formData.append('password', document.getElementById('password').value);
+                formData.append('password_confirmation', document.getElementById('password_confirmation').value);
                 formData.append('photo', lastBlob, 'docente.jpg');
 
                 submitBtn.disabled = true;

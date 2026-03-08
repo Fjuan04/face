@@ -31,12 +31,11 @@ class UserController extends Controller
     public function store(Request $request)
     {
 
-        
+
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'surname' => ['required', 'string', 'max:255'],
+            'fullname' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
             'photo' => ['required', 'image', 'mimes:jpeg,jpg,png', 'max:4096'], // 4MB
         ]);
 
@@ -45,8 +44,7 @@ class UserController extends Controller
         $photoPath = $request->file('photo')->store('faces');
 
         $user = User::create([
-            'name' => $validated['name'],
-            'surname' => $validated['surname'],
+            'fullname' => $validated['fullname'],
             'email' => $validated['email'],
             'password' => $validated['password'],
             'role_id' => 2,
@@ -62,10 +60,7 @@ class UserController extends Controller
             ], 201);
         }
 
-        // Respuesta para formulario Blade
-        return redirect()
-            ->back()
-            ->with('status', 'Docente registrado correctamente');
+
     }
 
     /**
@@ -98,5 +93,27 @@ class UserController extends Controller
     public function destroy(string $id)
     {
         //
+    }
+
+    public function search(Request $request)
+    {
+        //
+        $documento = $request->document;
+
+
+        //peticion a cronode
+        $res = Http::withHeaders([
+            'x-api-key' => config('app.api.key')
+        ])->get(config('app.api.url') . 'api/v1/users/instructors/activeInstructors');
+
+        $docentes = $res->json();
+
+        //busqueda del docente por documento y reindexacion de la respuesta
+        $docente = array_values(array_filter($docentes['data'],fn($u)=>$u['document'] == $documento ));
+        if(count($docente) < 1){
+            return response()->json(['message' => 'No se encontraron docentes con este número de identidad'],404);
+        }
+
+        return response()->json($docente[0], 200);
     }
 }
