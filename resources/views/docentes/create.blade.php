@@ -2,165 +2,426 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Registro de Docente</title>
+    <title>Registro de Docente · SENA</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+        :root {
+            --green:     #00ff9d;
+            --green2:    #00c97a;
+            --green-dim: rgba(0,255,157,0.08);
+            --red:       #ff3c5a;
+            --amber:     #ffb800;
+            --blue:      #38bdf8;
+            --bg:        #050a07;
+            --bg2:       #0a1210;
+            --bg3:       #0f1c18;
+            --border:    rgba(0,255,157,0.18);
+            --text:      #b6ffe0;
+            --text-dim:  #4d8a6a;
+            --mono:      'Share Tech Mono', monospace;
+            --sans:      'Rajdhani', sans-serif;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
         body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            background: #0f172a;
-            color: #e5e7eb;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--text);
             min-height: 100vh;
-            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+            overflow-x: hidden;
         }
-        .card {
-            background: #020617;
-            border-radius: 1rem;
-            padding: 2rem;
-            max-width: 900px;
+
+        /* Scanlines */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(
+                0deg,
+                transparent,
+                transparent 2px,
+                rgba(0,0,0,0.18) 2px,
+                rgba(0,0,0,0.18) 4px
+            );
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        /* Grid BG */
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(0,255,157,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,255,157,0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .shell {
+            position: relative;
+            z-index: 1;
             width: 100%;
-            box-shadow: 0 25px 50px -12px rgba(15,23,42,0.8);
-            border: 1px solid rgba(148,163,184,0.2);
+            max-width: 960px;
+        }
+
+        /* ── HEADER ─────────────────────────────── */
+        .header {
+            border: 1px solid var(--border);
+            background: var(--bg2);
+            padding: 1rem 1.5rem;
+            border-bottom: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            clip-path: polygon(0 0, calc(100% - 20px) 0, 100% 20px, 100% 100%, 0 100%);
+        }
+        .header-left { display: flex; align-items: center; gap: 1rem; }
+        .header-icon {
+            width: 40px; height: 40px;
+            border: 1px solid var(--green);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            position: relative; flex-shrink: 0;
+        }
+        .header-icon::after {
+            content: '';
+            position: absolute;
+            inset: 4px;
+            border: 1px solid var(--green2);
+            border-radius: 50%;
+            animation: pulse-ring 2s ease-in-out infinite;
+        }
+        @keyframes pulse-ring {
+            0%, 100% { opacity: 0.3; transform: scale(0.9); }
+            50%       { opacity: 1;   transform: scale(1.05); }
+        }
+        .header-icon svg { width: 18px; height: 18px; fill: var(--green); }
+        .header-title { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.08em; color: var(--green); text-transform: uppercase; }
+        .header-sub   { font-family: var(--mono); font-size: 0.72rem; color: var(--text-dim); margin-top: 2px; }
+        .header-meta  { font-family: var(--mono); font-size: 0.7rem; color: var(--text-dim); text-align: right; line-height: 1.6; }
+        .badge {
+            display: inline-block;
+            background: var(--green-dim);
+            border: 1px solid var(--green);
+            color: var(--green);
+            font-family: var(--mono);
+            font-size: 0.65rem;
+            padding: 2px 8px;
+            letter-spacing: 0.1em;
+        }
+
+        /* ── MAIN GRID ───────────────────────────── */
+        .main {
             display: grid;
-            grid-template-columns: 1.1fr 1fr;
-            gap: 2rem;
+            grid-template-columns: 1fr 1fr;
+            border: 1px solid var(--border);
+            background: var(--bg2);
         }
-        @media (max-width: 768px) {
-            .card {
-                grid-template-columns: 1fr;
-            }
+
+        /* ── FORM PANEL ──────────────────────────── */
+        .form-panel {
+            border-right: 1px solid var(--border);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.9rem;
         }
-        h1 {
-            margin-top: 0;
-            font-size: 1.75rem;
-            margin-bottom: 0.5rem;
+
+        .panel-label {
+            font-family: var(--mono);
+            font-size: 0.68rem;
+            color: var(--text-dim);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
-        p.subtitle {
-            margin-top: 0;
-            color: #9ca3af;
-            font-size: 0.9rem;
-        }
-        label {
+        .panel-label::before {
+            content: '';
             display: block;
-            font-size: 0.9rem;
-            margin-bottom: 0.35rem;
-            color: #e5e7eb;
+            width: 6px; height: 6px;
+            background: var(--green);
+            border-radius: 50%;
+            animation: blink 1.4s step-end infinite;
         }
-        input[type="text"],
-        input[type="email"],
-        input[type="password"] {
-            width: 100%;
-            padding: 0.6rem 0.75rem;
-            border-radius: 0.5rem;
-            border: 1px solid #1f2937;
-            background: #020617;
-            color: #e5e7eb;
-            font-size: 0.9rem;
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* Alerts */
+        .alert-ok {
+            background: rgba(0,255,157,0.06);
+            border: 1px solid rgba(0,255,157,0.3);
+            color: var(--green);
+            font-family: var(--mono);
+            font-size: 0.75rem;
+            padding: 0.6rem 0.8rem;
         }
-        input:focus {
+        .alert-err {
+            background: rgba(255,60,90,0.06);
+            border: 1px solid rgba(255,60,90,0.3);
+            color: #fca5a5;
+            font-family: var(--mono);
+            font-size: 0.75rem;
+            padding: 0.6rem 0.8rem;
+        }
+        .alert-err ul { padding-left: 1.1rem; margin-top: 0.35rem; }
+        .alert-err li { margin-bottom: 0.2rem; }
+        .alert-title { font-weight: 700; letter-spacing: 0.06em; display: block; margin-bottom: 0.25rem; }
+
+        /* Fields */
+        .field { display: flex; flex-direction: column; gap: 0.3rem; }
+
+        .field label {
+            font-family: var(--mono);
+            font-size: 0.68rem;
+            color: var(--text-dim);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .field input {
+            background: #000;
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-family: var(--mono);
+            font-size: 0.82rem;
+            padding: 0.5rem 0.7rem;
             outline: none;
-            border-color: #38bdf8;
-            box-shadow: 0 0 0 1px rgba(56,189,248,0.5);
+            width: 100%;
+            transition: border-color 0.15s, box-shadow 0.15s;
+            clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
         }
-        .field {
-            margin-bottom: 0.9rem;
+        .field input:focus {
+            border-color: var(--green);
+            box-shadow: 0 0 0 1px rgba(0,255,157,0.2);
         }
+        .field input::placeholder { color: var(--text-dim); opacity: 0.6; }
+
+        .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+
+        /* Buttons */
         .btn {
+            font-family: var(--sans);
+            font-weight: 600;
+            font-size: 0.85rem;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 0.55rem 1rem;
+            border: 1px solid;
+            cursor: pointer;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 0.35rem;
-            padding: 0.6rem 1.1rem;
-            border-radius: 999px;
-            border: none;
-            cursor: pointer;
-            font-size: 0.9rem;
-            font-weight: 500;
+            gap: 0.4rem;
+            transition: background 0.15s, box-shadow 0.15s;
+            background: transparent;
+            clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
         }
-        .btn-primary {
-            background: linear-gradient(to right, #0ea5e9, #6366f1);
-            color: #f9fafb;
+        .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        .btn-primary  { border-color: var(--green); color: var(--green); }
+        .btn-primary:hover:not(:disabled) { background: rgba(0,255,157,0.1); box-shadow: 0 0 18px rgba(0,255,157,0.25); }
+
+        .btn-secondary { border-color: var(--text-dim); color: var(--text-dim); }
+        .btn-secondary:hover:not(:disabled) { border-color: var(--text); color: var(--text); background: rgba(182,255,224,0.06); }
+
+        .btn-amber { border-color: var(--amber); color: var(--amber); }
+        .btn-amber:hover:not(:disabled) { background: rgba(255,184,0,0.08); }
+
+        .btn-red { border-color: var(--red); color: var(--red); }
+        .btn-red:hover:not(:disabled) { background: rgba(255,60,90,0.08); }
+
+        .btn-full { width: 100%; }
+
+        /* Spinner */
+        .spinner {
+            width: 12px; height: 12px;
+            border: 1.5px solid var(--text-dim);
+            border-top-color: var(--green);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            display: none;
         }
-        .btn-secondary {
-            background: #020617;
-            border: 1px solid #1f2937;
-            color: #e5e7eb;
-        }
-        .btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .status {
-            font-size: 0.85rem;
-            margin-top: 0.5rem;
-        }
-        .status-ok {
-            color: #22c55e;
-        }
-        .status-error {
-            color: #f97316;
-        }
-        .camera-container {
-            background: radial-gradient(circle at top left, rgba(56,189,248,0.18), transparent 55%),
-                        radial-gradient(circle at bottom right, rgba(129,140,248,0.22), transparent 55%);
-            border-radius: 1rem;
-            padding: 1rem;
-            border: 1px solid rgba(148,163,184,0.25);
-        }
-        video, canvas, img {
-            width: 100%;
-            border-radius: 0.75rem;
-            background: #020617;
-        }
-        .camera-actions {
+        .spinner.active { display: block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── CAM PANEL ───────────────────────────── */
+        .cam-panel {
+            padding: 1.25rem;
             display: flex;
-            gap: 0.5rem;
-            margin-top: 0.75rem;
-            flex-wrap: wrap;
+            flex-direction: column;
+            gap: 0.75rem;
         }
-        .badge {
-            display: inline-flex;
+
+        .viewfinder {
+            position: relative;
+            background: #000;
+            border: 1px solid var(--border);
+            aspect-ratio: 4/3;
+            overflow: hidden;
+        }
+        .viewfinder video,
+        .viewfinder img {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .viewfinder canvas { display: none; }
+
+        /* Corner brackets */
+        .viewfinder::before, .viewfinder::after,
+        .bracket-bl, .bracket-br {
+            content: '';
+            position: absolute;
+            width: 18px; height: 18px;
+            border-color: var(--green);
+            border-style: solid;
+            z-index: 2;
+            pointer-events: none;
+        }
+        .viewfinder::before { top: 8px; left: 8px;  border-width: 2px 0 0 2px; }
+        .viewfinder::after  { top: 8px; right: 8px; border-width: 2px 2px 0 0; }
+        .bracket-bl { bottom: 8px; left: 8px;  border-width: 0 0 2px 2px; }
+        .bracket-br { bottom: 8px; right: 8px; border-width: 0 2px 2px 0; }
+
+        .scan-line {
+            position: absolute;
+            left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--green), transparent);
+            opacity: 0;
+            z-index: 3;
+            pointer-events: none;
+        }
+        .scan-line.active {
+            animation: scan 1.8s ease-in-out infinite;
+            opacity: 1;
+        }
+        @keyframes scan { 0% { top: 0%; } 100% { top: 100%; } }
+
+        .cam-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
             align-items: center;
-            gap: 0.25rem;
-            padding: 0.25rem 0.6rem;
-            border-radius: 999px;
-            font-size: 0.72rem;
-            background: rgba(15,23,42,0.85);
-            border: 1px solid rgba(148,163,184,0.3);
-            color: #9ca3af;
+            justify-content: center;
+            flex-direction: column;
+            gap: 0.5rem;
+            background: rgba(5,10,7,0.9);
+            z-index: 4;
         }
-        .error-list {
-            background: rgba(248,113,113,0.08);
-            border: 1px solid rgba(248,113,113,0.35);
-            color: #fecaca;
-            padding: 0.75rem;
-            border-radius: 0.75rem;
-            font-size: 0.8rem;
-            margin-bottom: 0.9rem;
+        .cam-overlay svg { width: 32px; height: 32px; stroke: var(--text-dim); fill: none; stroke-width: 1.5; }
+        .cam-overlay span { font-family: var(--mono); font-size: 0.72rem; color: var(--text-dim); }
+
+        /* Capture indicator */
+        .img-indicator {
+            border: 1px solid var(--border);
+            padding: 0.5rem 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-family: var(--mono);
+            font-size: 0.7rem;
+        }
+        .img-indicator .key { color: var(--text-dim); }
+        .img-indicator .val { color: var(--text); }
+        .img-indicator .val.ok   { color: var(--green); }
+        .img-indicator .val.warn { color: var(--amber); }
+
+        .cam-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        /* ── LOG FOOTER ──────────────────────────── */
+        .log-footer {
+            border: 1px solid var(--border);
+            border-top: none;
+            background: var(--bg2);
+            padding: 0.75rem 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: var(--mono);
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            min-height: 36px;
+        }
+        .log-footer::before { content: '//'; color: var(--green); opacity: 0.5; }
+        #log-msg.ok   { color: var(--green); }
+        #log-msg.err  { color: var(--red); }
+        #log-msg.warn { color: var(--amber); }
+
+        .section-divider {
+            font-family: var(--mono);
+            font-size: 0.62rem;
+            color: var(--text-dim);
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .section-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+        @media (max-width: 640px) {
+            .main { grid-template-columns: 1fr; }
+            .form-panel { border-right: none; border-bottom: 1px solid var(--border); }
+            .field-row { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-    <div class="card">
-        <div>
-            <h1>Registro de docente</h1>
-            <p class="subtitle">
-                Completa los datos del docente y toma una foto desde la cámara. La imagen se guardará en el servidor y
-                en la base de datos solo se almacenará la ruta.
-            </p>
+<div class="shell">
+
+    <!-- HEADER -->
+    <div class="header">
+        <div class="header-left">
+            <div class="header-icon">
+                <svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>
+            </div>
+            <div>
+                <div class="header-title">Registro de Docente</div>
+                <div class="header-sub">SENA · Control de Acceso Biométrico · Nuevo registro</div>
+            </div>
+        </div>
+        <div class="header-meta">
+            <span class="badge">ADMIN</span><br>
+            <span id="clock">--:--:--</span>
+        </div>
+    </div>
+
+    <!-- MAIN -->
+    <div class="main">
+
+        <!-- FORM PANEL -->
+        <div class="form-panel">
+            <div class="panel-label">Datos del docente</div>
 
             @if (session('status'))
-                <div class="status status-ok">
+                <div class="alert-ok">
+                    <span class="alert-title">✓ OPERACIÓN EXITOSA</span>
                     {{ session('status') }}
                 </div>
             @endif
 
             @if ($errors->any())
-                <div class="error-list">
-                    <strong>Revisa los siguientes campos:</strong>
+                <div class="alert-err">
+                    <span class="alert-title">✗ REVISA LOS CAMPOS</span>
                     <ul>
                         @foreach ($errors->all() as $error)
                             <li>{{ $error }}</li>
@@ -171,209 +432,264 @@
 
             <form id="docente-form" method="POST" enctype="multipart/form-data" action="{{ route('docentes.store') }}">
                 @csrf
-                <div class="field">
-                    <label for="fullname">Nombre Completo</label>
-                    <input type="text" id="fullname" name="fullname" value="{{ old('fullname') }}" required>
-                </div>
+                <input type="file" id="photo-input" name="photo" accept="image/*" style="display:none;">
 
-                <div class="field">
-                    <label for="email">Correo institucional</label>
-                    <input type="email" id="email" name="email" value="{{ old('email') }}" required>
-                </div>
-                <div class="field">
-                    <label for="password">Contraseña (para pruebas)</label>
-                    <input type="password" id="password" name="password" required>
-                </div>
-                <div class="field">
-                    <label for="password_confirmation">Confirmar contraseña</label>
-                    <input type="password" id="password_confirmation" name="password_confirmation" required>
-                </div>
-                <input type="file" id="photo-input" name="photo" accept="image/*" class="hidden" style="display:none;">
+                <div style="display:flex; flex-direction:column; gap:0.75rem;">
+                    <div class="field">
+                        <label for="fullname">Nombre completo</label>
+                        <input type="text" id="fullname" name="fullname" value="{{ old('fullname') }}" placeholder="Ej. Ana María García" required>
+                    </div>
 
-                <div class="field" style="margin-top: 1.2rem;">
-                    <button type="submit" class="btn btn-primary" id="submit-btn">
+                    <div class="field">
+                        <label for="email">Correo institucional</label>
+                        <input type="email" id="email" name="email" value="{{ old('email') }}" placeholder="docente@sena.edu.co" required>
+                    </div>
+
+                    <div class="field-row">
+                        <div class="field">
+                            <label for="password">Contraseña</label>
+                            <input type="password" id="password" name="password" placeholder="••••••••" required>
+                        </div>
+                        <div class="field">
+                            <label for="password_confirmation">Confirmar</label>
+                            <input type="password" id="password_confirmation" name="password_confirmation" placeholder="••••••••" required>
+                        </div>
+                    </div>
+
+                    <div class="section-divider" style="margin-top:0.25rem;">Acción</div>
+
+                    <button type="submit" class="btn btn-primary btn-full" id="submit-btn">
+                        <div class="spinner" id="submit-spinner"></div>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v14a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                         Guardar docente
                     </button>
-                    <div class="status" id="form-status"></div>
                 </div>
             </form>
         </div>
 
-        <div class="camera-container">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-                <span style="font-size:0.9rem; font-weight:500;">Cámara / captura de rostro</span>
-                <span class="badge">
-                    <span style="width:8px; height:8px; border-radius:999px; background:#22c55e;"></span>
-                    WebRTC
-                </span>
+        <!-- CAM PANEL -->
+        <div class="cam-panel">
+            <div class="panel-label">Captura biométrica</div>
+
+            <div class="viewfinder" id="viewfinder">
+                <div class="bracket-bl"></div>
+                <div class="bracket-br"></div>
+                <div class="scan-line" id="scan-line"></div>
+
+                <div class="cam-overlay" id="cam-overlay">
+                    <svg viewBox="0 0 24 24"><path d="M15 8v8H5V8h10m1-2H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4V7c0-.55-.45-1-1-1z"/></svg>
+                    <span>Cámara no iniciada</span>
+                </div>
+
+                <video id="video" autoplay playsinline style="display:none;"></video>
+                <canvas id="canvas" style="display:none;"></canvas>
+                <img id="preview" alt="Foto capturada" style="display:none; position:absolute; inset:0; width:100%; height:100%; object-fit:cover;">
             </div>
 
-            <video id="video" autoplay playsinline style="display:block;"></video>
-            <canvas id="canvas" style="display:none;"></canvas>
-            <img id="preview" alt="Previsualización de la foto" style="display:none; margin-top:0.5rem;">
+            <div class="img-indicator">
+                <span class="key">FOTO</span>
+                <span class="val warn" id="img-status">SIN CAPTURA</span>
+            </div>
 
-            <div class="camera-actions">
-                <button class="btn btn-secondary" id="start-camera-btn" type="button">
+            <div class="cam-actions">
+                <button class="btn btn-secondary" id="start-btn" type="button">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/></svg>
                     Iniciar cámara
                 </button>
-                <button class="btn btn-secondary" id="capture-btn" type="button" disabled>
-                    Tomar foto
+                <button class="btn btn-amber" id="capture-btn" type="button" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M20 5h-3.17L15 3H9L7.17 5H4a2 2 0 00-2 2v12a2 2 0 002 2h16a2 2 0 002-2V7a2 2 0 00-2-2z"/></svg>
+                    Capturar
                 </button>
-                <button class="btn btn-secondary" id="reset-photo-btn" type="button" disabled>
+                <button class="btn btn-secondary" id="reset-btn" type="button" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
                     Repetir foto
                 </button>
-                <span class="status" id="camera-status"></span>
+                <button class="btn btn-red" id="stop-btn" type="button" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                    Detener
+                </button>
             </div>
 
-            <p style="font-size:0.75rem; color:#9ca3af; margin-top:0.75rem;">
-                En móviles, si el navegador no soporta la cámara embebida, puedes usar directamente la selección de
-                imagen del sistema (se abrirá la cámara nativa).
+            <p style="font-family:var(--mono); font-size:0.65rem; color:var(--text-dim); line-height:1.6;">
+                // La imagen se adjunta automáticamente al formulario.<br>
+                // En móviles puedes usar la cámara nativa del sistema.
             </p>
         </div>
     </div>
 
-    <script>
-        const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const preview = document.getElementById('preview');
-        const startCameraBtn = document.getElementById('start-camera-btn');
-        const captureBtn = document.getElementById('capture-btn');
-        const resetPhotoBtn = document.getElementById('reset-photo-btn');
-        const cameraStatus = document.getElementById('camera-status');
-        const form = document.getElementById('docente-form');
-        const submitBtn = document.getElementById('submit-btn');
-        const formStatus = document.getElementById('form-status');
+    <!-- LOG FOOTER -->
+    <div class="log-footer">
+        <div class="spinner active" id="spinner" style="display:none;"></div>
+        <span id="log-msg">Sistema listo. Completa los datos e inicia la cámara.</span>
+    </div>
+
+</div>
+
+<script>
+    // ── ELEMENTS ──────────────────────────────────────────────
+    const video       = document.getElementById('video');
+    const canvas      = document.getElementById('canvas');
+    const preview     = document.getElementById('preview');
+    const startBtn    = document.getElementById('start-btn');
+    const captureBtn  = document.getElementById('capture-btn');
+    const resetBtn    = document.getElementById('reset-btn');
+    const stopBtn     = document.getElementById('stop-btn');
+    const scanLine    = document.getElementById('scan-line');
+    const camOverlay  = document.getElementById('cam-overlay');
+    const imgStatus   = document.getElementById('img-status');
+    const logMsg      = document.getElementById('log-msg');
+    const spinner     = document.getElementById('spinner');
+    const submitBtn   = document.getElementById('submit-btn');
+    const submitSpinner = document.getElementById('submit-spinner');
+    const form        = document.getElementById('docente-form');
+
+    let stream   = null;
+    let lastBlob = null;
+
+    // ── CLOCK ─────────────────────────────────────────────────
+    function tick() {
+        document.getElementById('clock').textContent =
+            new Date().toLocaleTimeString('es-CO', { hour12: false });
+    }
+    tick(); setInterval(tick, 1000);
+
+    // ── LOG ───────────────────────────────────────────────────
+    function log(msg, type = '') {
+        logMsg.textContent = msg;
+        logMsg.className = type;
+    }
+
+    // ── CAMERA ────────────────────────────────────────────────
+    async function startCamera() {
+        log('Solicitando acceso a la cámara…');
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+            video.srcObject = stream;
+            video.style.display = 'block';
+            camOverlay.style.display = 'none';
+            scanLine.classList.add('active');
+            captureBtn.disabled = false;
+            stopBtn.disabled = false;
+            startBtn.disabled = true;
+            log('Cámara activa. Enfoca el rostro del docente y captura.', 'ok');
+        } catch (e) {
+            log('No se pudo acceder a la cámara. Revisa los permisos del navegador.', 'err');
+        }
+    }
+
+    function stopCamera() {
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
+        }
+        video.style.display = 'none';
+        camOverlay.style.display = 'flex';
+        scanLine.classList.remove('active');
+        startBtn.disabled = false;
+        captureBtn.disabled = true;
+        stopBtn.disabled = true;
+        log('Cámara detenida.', '');
+    }
+
+    // ── CAPTURE ───────────────────────────────────────────────
+    function capturePhoto() {
+        if (!stream) return;
+        const w = video.videoWidth  || 640;
+        const h = video.videoHeight || 480;
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+
+        canvas.toBlob((blob) => {
+            if (!blob) { log('No se pudo capturar la imagen.', 'err'); return; }
+            lastBlob = blob;
+            preview.src = URL.createObjectURL(blob);
+            preview.style.display = 'block';
+            video.style.display = 'none';
+            scanLine.classList.remove('active');
+            resetBtn.disabled = false;
+            imgStatus.textContent = `OK  (${(blob.size / 1024).toFixed(1)} KB · 640×480)`;
+            imgStatus.className = 'val ok';
+            log('Foto capturada. Completa los datos y guarda el docente.', 'ok');
+        }, 'image/jpeg', 0.95);
+    }
+
+    // ── RESET PHOTO ───────────────────────────────────────────
+    function resetPhoto() {
+        lastBlob = null;
+        preview.style.display = 'none';
+        preview.src = '';
+        if (stream) {
+            video.style.display = 'block';
+            scanLine.classList.add('active');
+        }
+        resetBtn.disabled = true;
+        imgStatus.textContent = 'SIN CAPTURA';
+        imgStatus.className = 'val warn';
+        log('Foto descartada. Captura de nuevo cuando estés listo.', '');
+    }
+
+    // ── EVENTS ────────────────────────────────────────────────
+    startBtn.addEventListener('click', startCamera);
+    captureBtn.addEventListener('click', capturePhoto);
+    resetBtn.addEventListener('click', resetPhoto);
+    stopBtn.addEventListener('click', stopCamera);
+    window.addEventListener('beforeunload', stopCamera);
+
+    // ── FORM SUBMIT ───────────────────────────────────────────
+    form.addEventListener('submit', function (e) {
         const photoInput = document.getElementById('photo-input');
 
-        let stream = null;
-        let lastBlob = null;
-
-        async function startCamera() {
-            cameraStatus.textContent = '';
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({
-                    video: { width: 640, height: 480 }
-                });
-                video.srcObject = stream;
-                captureBtn.disabled = false;
-                resetPhotoBtn.disabled = true;
-                cameraStatus.textContent = 'Cámara activada. Enfoca el rostro del docente.';
-                cameraStatus.className = 'status';
-            } catch (error) {
-                console.error(error);
-                cameraStatus.textContent = 'No se pudo acceder a la cámara. Permite el acceso o usa la subida manual.';
-                cameraStatus.className = 'status status-error';
-            }
+        if (!lastBlob && !photoInput.files.length) {
+            e.preventDefault();
+            log('Debes capturar una foto antes de guardar el docente.', 'err');
+            return;
         }
 
-        function stopCamera() {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
-                stream = null;
-            }
-        }
+        if (lastBlob) {
+            e.preventDefault();
 
-        function capturePhoto() {
-            if (!stream) return;
+            submitBtn.disabled = true;
+            submitSpinner.style.display = 'block';
+            log('Enviando datos al servidor…', 'warn');
 
-            const videoWidth = video.videoWidth || 640;
-            const videoHeight = video.videoHeight || 480;
+            const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+            const formData  = new FormData();
+            formData.append('_token',                csrfToken);
+            formData.append('fullname',              document.getElementById('fullname').value);
+            formData.append('email',                 document.getElementById('email').value);
+            formData.append('password',              document.getElementById('password').value);
+            formData.append('password_confirmation', document.getElementById('password_confirmation').value);
+            formData.append('photo', lastBlob, 'docente.jpg');
 
-            canvas.width = videoWidth;
-            canvas.height = videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0, videoWidth, videoHeight);
-
-            canvas.toBlob((blob) => {
-                if (!blob) {
-                    cameraStatus.textContent = 'No se pudo capturar la imagen.';
-                    cameraStatus.className = 'status status-error';
-                    return;
+            fetch(form.action, {
+                method: 'POST',
+                headers: { 'Accept': 'application/json' },
+                body: formData,
+            })
+            .then(async (res) => {
+                const data = await res.json().catch(() => ({}));
+                if (res.ok) {
+                    log('Docente registrado correctamente.', 'ok');
+                    form.reset();
+                    resetPhoto();
+                } else {
+                    const msg = data.message
+                        || (data.errors ? Object.values(data.errors).flat().join(' · ') : '')
+                        || `Error HTTP ${res.status}`;
+                    log(`✗ ${msg}`, 'err');
                 }
-
-                lastBlob = blob;
-
-                // Mostrar previsualización
-                const url = URL.createObjectURL(blob);
-                preview.src = url;
-                preview.style.display = 'block';
-
-                cameraStatus.textContent = 'Foto capturada. Ahora puedes guardar el docente.';
-                cameraStatus.className = 'status status-ok';
-
-                resetPhotoBtn.disabled = false;
-            }, 'image/jpeg', 0.95);
+            })
+            .catch((err) => {
+                console.error(err);
+                log('Error de red al enviar el formulario.', 'err');
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitSpinner.style.display = 'none';
+            });
         }
-
-        function resetPhoto() {
-            lastBlob = null;
-            preview.src = '';
-            preview.style.display = 'none';
-            cameraStatus.textContent = 'Vuelve a tomar la foto cuando estés listo.';
-            cameraStatus.className = 'status';
-        }
-
-        startCameraBtn.addEventListener('click', startCamera);
-        captureBtn.addEventListener('click', capturePhoto);
-        resetPhotoBtn.addEventListener('click', resetPhoto);
-
-        window.addEventListener('beforeunload', stopCamera);
-
-        form.addEventListener('submit', function (event) {
-            if (!lastBlob && !photoInput.files.length) {
-                event.preventDefault();
-                formStatus.textContent = 'Debes tomar una foto o seleccionar una imagen antes de guardar.';
-                formStatus.className = 'status status-error';
-                return;
-            }
-
-            if (lastBlob) {
-                event.preventDefault();
-
-                const formData = new FormData();
-                const csrfToken = document.querySelector('meta[name=\"csrf-token\"]').getAttribute('content');
-
-                formData.append('_token', csrfToken);
-                formData.append('fullname', document.getElementById('fullname').value);
-                formData.append('email', document.getElementById('email').value);
-                formData.append('password', document.getElementById('password').value);
-                formData.append('password_confirmation', document.getElementById('password_confirmation').value);
-                formData.append('photo', lastBlob, 'docente.jpg');
-
-                submitBtn.disabled = true;
-                formStatus.textContent = 'Enviando datos...';
-                formStatus.className = 'status';
-
-                fetch(form.action, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'Accept': 'application/json'
-                    }
-                })
-                    .then(async (response) => {
-                        const data = await response.json().catch(() => ({}));
-                        if (response.ok) {
-                            formStatus.textContent = 'Docente registrado correctamente.';
-                            formStatus.className = 'status status-ok';
-                            form.reset();
-                            resetPhoto();
-                        } else {
-                            formStatus.textContent = data.message || 'Error al registrar el docente.';
-                            formStatus.className = 'status status-error';
-                        }
-                    })
-                    .catch((error) => {
-                        console.error(error);
-                        formStatus.textContent = 'Error de red al enviar el formulario.';
-                        formStatus.className = 'status status-error';
-                    })
-                    .finally(() => {
-                        submitBtn.disabled = false;
-                    });
-            }
-        });
-    </script>
+        // Si viene de photo-input (archivo manual), dejar envío normal del form
+    });
+</script>
 </body>
 </html>
-

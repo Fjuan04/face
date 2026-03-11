@@ -128,7 +128,7 @@ def cargar_rostros_conocidos():
     # - nombre   -> name
     # - foto     -> photo (ruta relativa en storage/app/private/faces)
     # - activo   -> is_active
-    cursor.execute("SELECT id, name, photo FROM users WHERE is_active = 1")
+    cursor.execute("SELECT id, fullname, photo FROM users WHERE is_active = 1")
     personas = cursor.fetchall()
     log_message(f"Usuarios activos encontrados en la base de datos: {len(personas)}")
     
