@@ -18,3 +18,11 @@ Route::post('/docentes/registro', [UserController::class, 'store'])
 // Vista de prueba para tomar foto y enviar a la API de reconocimiento
 Route::get('/reconocer/test', [FaceRecognitionController::class, 'testView'])
     ->name('reconocer.test');
+
+
+// ruta prueba admin mdw
+Route::middleware(['auth:sanctum', 'admin'])->group(function () {
+    Route::get('/admin/users', function(){
+        return response()->json(['res'=>'admin']);
+    });
+});

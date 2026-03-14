@@ -15,7 +15,8 @@ return new class extends Migration
             $table->id();
             $table->string('fullname');
             $table->string('password');
-            $table->string('email')->unique();;
+            $table->string('email')->unique();
+            $table->enum('gender', ['Femenino', 'Masculino', 'No binario', 'Trans', 'N/A'])->default('N/A');
             $table->foreignId('role_id')->constrained()->default(2);
             $table->boolean('is_active')->default(1);
             $table->text('photo')->nullable();
