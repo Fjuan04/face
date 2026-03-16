@@ -35,6 +35,9 @@ Route::prefix('face')->group(function(){
 
     Route::middleware('auth:sanctum')->group(function(){
 
+        Route::post('/docent', [UserController::class, 'store'])
+        ->name('docent.store');
+
         Route::post('/2fa/enable', [AuthController::class, 'enableTwoFactor']);
         Route::post('/2fa/disable', [AuthController::class, 'disableTwoFactor']);
 
