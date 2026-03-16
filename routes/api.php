@@ -38,8 +38,12 @@ Route::prefix('face')->group(function(){
         Route::post('/2fa/enable', [AuthController::class, 'enableTwoFactor']);
         Route::post('/2fa/disable', [AuthController::class, 'disableTwoFactor']);
 
+        //registro 1. buscar el docente
         Route::post('/search/docent', [UserController::class, 'search'])
             ->name('search.docent');
+        //Endpoint para registrar
+        Route::post('docent', [UserController::class, 'store'])
+        ->name('docent.store');
 
         Route::get('/user', function (Request $request) {
             return $request->user();

@@ -68,23 +68,27 @@ log_message("Detectores de Dlib inicializados correctamente")
 # Conexión a MySQL (leyendo de variables de entorno, alineadas con el .env de Laravel)
 log_message("Estableciendo conexión con MySQL usando variables de entorno")
 
-db_host = os.environ.get("DB_HOST")
-db_user = os.environ.get("DB_USERNAME")
-db_password = os.environ.get("DB_PASSWORD")
-db_name = os.environ.get("DB_DATABASE")
-db_port = int(os.environ.get("DB_PORT"))
+db_host = os.environ.get("DB_HOST", '127.0.0.1')
+db_user = os.environ.get("DB_USERNAME", 'root')
+db_password = os.environ.get("DB_PASSWORD", '')
+db_name = os.environ.get("DB_DATABASE",'face')
+db_port = int(os.environ.get("DB_PORT", 3306))
 
 log_message(f"DB_HOST={db_host}, DB_NAME={db_name}, DB_USER={db_user}, DB_PORT={db_port}")
 
-conn = mysql.connector.connect(
-    host=db_host,
-    user=db_user,
-    password=db_password,
-    database=db_name,
-    port=db_port,
-)
-cursor = conn.cursor()
-log_message("Conexión a MySQL establecida correctamente")
+try:
+    conn = mysql.connector.connect(
+        host=db_host,
+        user=db_user,
+        password=db_password,
+        database=db_name,
+        port=db_port,
+    )
+    cursor = conn.cursor()
+    log_message("Conexión a MySQL establecida correctamente")
+except Exception as e:
+    log_message(f"ERROR al conectar a MySQL: {e}")
+    raise
 
 def obtener_descriptor_rostro(imagen_path):
     """Extrae el descriptor facial (vector de características) de una imagen.
