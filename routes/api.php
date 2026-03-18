@@ -36,17 +36,21 @@ Route::prefix('face')->group(function(){
     Route::middleware('auth:sanctum')->group(function(){
 
         Route::post('/docent', [UserController::class, 'store'])
-        ->name('docent.store');
+        ->name('docent.store')
+        ->middleware('admin');
+
 
         Route::post('/2fa/enable', [AuthController::class, 'enableTwoFactor']);
         Route::post('/2fa/disable', [AuthController::class, 'disableTwoFactor']);
 
         //registro 1. buscar el docente
         Route::post('/search/docent', [UserController::class, 'search'])
-            ->name('search.docent');
+        ->name('search.docent');
         //Endpoint para registrar
         Route::post('docent', [UserController::class, 'store'])
         ->name('docent.store');
+        //endpoint para tomas y kevin
+        Route::post('/user', [UserController::class, 'store'])->name('user.store')->middleware('docent');
 
         Route::get('/user', function (Request $request) {
             return $request->user();

@@ -31,13 +31,25 @@ class UserController extends Controller
     public function store(Request $request)
     {
 
-
-        $validated = $request->validate([
+        if ($request->route()->getName() === 'user.store') {
+            $validated = $request->validate([
+                'fullname' => ['required', 'string', 'max:255'],
+                'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+                'role_id' => ['required', 'exists:roles,id'],
+                'password' => ['required', 'string', 'min:8', 'confirmed'],
+                'photo' => ['required', 'image', 'mimes:jpeg,jpg,png', 'max:4096'], // 4MB
+            ]);
+        }else {
+            $validated = $request->validate([
             'fullname' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8', 'confirmed'],
             'photo' => ['required', 'image', 'mimes:jpeg,jpg,png', 'max:4096'], // 4MB
         ]);
+        }
+
+
+
 
         // Guardar la foto en un disco PRIVADO (por defecto: storage/app/faces)
         // Usamos el disco 'local' (config/filesystems.php) que no es accesible públicamente por URL.
@@ -55,7 +67,7 @@ class UserController extends Controller
         // Respuesta JSON para consumo desde frontend
         if ($request->expectsJson() || $request->is('api/*')) {
             return response()->json([
-                'message' => 'Docente registrado correctamente',
+                'message' => 'Usuario registrado correctamente',
                 'user' => $user,
             ], 201);
         }

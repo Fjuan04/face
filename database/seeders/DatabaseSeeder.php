@@ -25,11 +25,29 @@ class DatabaseSeeder extends Seeder
             "name"=> "docent",
         ]);
 
+        Role::create([
+            "name"=> "student",
+        ]);
+
         User::create([
             'fullname' => 'super',
             'password' => 'admin',
             'email' => 'admin@gmail.com',
             'role_id'=> 1
+        ]);
+
+        User::create([
+            'fullname' => 'docent',
+            'password' => 'docent',
+            'email' => 'docent@gmail.com',
+            'role_id'=> 2
+        ]);
+
+        User::create([
+            'fullname' => 'student',
+            'password' => 'student',
+            'email' => 'student@gmail.com',
+            'role_id'=> 3
         ]);
     }
 }
