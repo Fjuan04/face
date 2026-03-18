@@ -30,6 +30,8 @@ class DatabaseSeeder extends Seeder
         ]);
 
         User::create([
+            'id' => 1,
+            'document' => '1234567890',
             'fullname' => 'super',
             'password' => 'admin',
             'email' => 'admin@gmail.com',
@@ -37,6 +39,8 @@ class DatabaseSeeder extends Seeder
         ]);
 
         User::create([
+            'id' => 2,
+            'document' => '12345678901',
             'fullname' => 'docent',
             'password' => 'docent',
             'email' => 'docent@gmail.com',
@@ -44,6 +48,8 @@ class DatabaseSeeder extends Seeder
         ]);
 
         User::create([
+            'id' => 3,
+            'document' => '12345678902',
             'fullname' => 'student',
             'password' => 'student',
             'email' => 'student@gmail.com',

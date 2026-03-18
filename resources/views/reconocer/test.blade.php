@@ -526,6 +526,14 @@
                     <span class="toggle-track"></span>
                     Modo ESP32 (multipart)
                 </label>
+                <label class="toggle-row" title="Selecciona el ID del ambiente">
+                    Ambient ID: 
+                    <select id="ambient-id-select" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:4px 8px;font-family:var(--mono);outline:none;">
+                        <option value="11">11</option>
+                        <option value="12">12</option>
+                        <option value="13">13</option>
+                    </select>
+                </label>
             </div>
         </div>
 
@@ -600,6 +608,7 @@
     const sendBtn     = document.getElementById('send-btn');
     const resetBtn    = document.getElementById('reset-btn');
     const esp32Mode   = document.getElementById('esp32-mode');
+    const ambientIdSelect = document.getElementById('ambient-id-select');
     const scanLine    = document.getElementById('scanLine');
     const camOverlay  = document.getElementById('camOverlay');
     const responseBox = document.getElementById('response-box');
@@ -720,6 +729,7 @@
                 // ── Modo ESP32: multipart/form-data (idéntico al .ino) ──
                 const formData = new FormData();
                 formData.append('imagen', lastBlob, 'esp32cam.jpg');
+                formData.append('ambient_id', ambientIdSelect.value);
                 // El .ino también puede enviar la IP como dato adicional si se configura
                 response = await fetch('{{ route('api.recognize') }}', {
                     method: 'POST',
@@ -736,7 +746,7 @@
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
                     },
-                    body: JSON.stringify({ ip: '127.0.0.1', imagen: dataUrl }),
+                    body: JSON.stringify({ ip: '127.0.0.1', imagen: dataUrl, ambient_id: ambientIdSelect.value }),
                 });
             }
 

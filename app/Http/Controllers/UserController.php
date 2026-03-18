@@ -33,19 +33,23 @@ class UserController extends Controller
 
         if ($request->route()->getName() === 'user.store') {
             $validated = $request->validate([
+                'id' => ['required', 'integer', 'unique:users,id'],
                 'fullname' => ['required', 'string', 'max:255'],
+                'document' => ['required', 'string', 'max:255'],
+                'gender' => ['required', 'string', 'max:255'],
                 'email' => ['required', 'email', 'max:255', 'unique:users,email'],
                 'role_id' => ['required', 'exists:roles,id'],
                 'password' => ['required', 'string', 'min:8', 'confirmed'],
                 'photo' => ['required', 'image', 'mimes:jpeg,jpg,png', 'max:4096'], // 4MB
             ]);
-        }else {
+        } else {
             $validated = $request->validate([
-            'fullname' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'string', 'min:8', 'confirmed'],
-            'photo' => ['required', 'image', 'mimes:jpeg,jpg,png', 'max:4096'], // 4MB
-        ]);
+                'id' => ['required', 'integer', 'unique:users,id'],
+                'fullname' => ['required', 'string', 'max:255'],
+                'email' => ['required', 'email', 'max:255', 'unique:users,email'],
+                'password' => ['required', 'string', 'min:8', 'confirmed'],
+                'photo' => ['required', 'image', 'mimes:jpeg,jpg,png', 'max:4096'], // 4MB
+            ]);
         }
 
 
@@ -56,6 +60,9 @@ class UserController extends Controller
         $photoPath = $request->file('photo')->store('faces');
 
         $user = User::create([
+            'id' => $validated['id'],
+            'document' => $validated['document'] ?? '',
+            'gender' => $validated['gender'] ?? 'N/A',
             'fullname' => $validated['fullname'],
             'email' => $validated['email'],
             'password' => $validated['password'],
