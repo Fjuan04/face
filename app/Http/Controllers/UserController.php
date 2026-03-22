@@ -45,6 +45,8 @@ class UserController extends Controller
         } else {
             $validated = $request->validate([
                 'id' => ['required', 'integer', 'unique:users,id'],
+                'document' => ['required', 'string', 'max:255'],
+                'gender' => ['required', 'string', 'max:255'],
                 'fullname' => ['required', 'string', 'max:255'],
                 'email' => ['required', 'email', 'max:255', 'unique:users,email'],
                 'password' => ['required', 'string', 'min:8', 'confirmed'],

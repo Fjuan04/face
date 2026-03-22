@@ -1,6 +1,7 @@
 <?php
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\AmbientAssignmentController;
 use App\Http\Controllers\FaceRecognitionController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -33,6 +34,11 @@ Route::prefix('face')->group(function(){
     Route::post('/2fa/verify', [AuthController::class, 'verifyTwoFactor'])
         ->middleware('throttle:5,1');
 
+    //ambientes
+        Route::get('/ambients', [AmbientAssignmentController::class, 'ambients']);
+
+    //protegidas
+
     Route::middleware('auth:sanctum')->group(function(){
 
         Route::post('/docent', [UserController::class, 'store'])
@@ -52,6 +58,10 @@ Route::prefix('face')->group(function(){
         //endpoint para tomas y kevin
         Route::post('/user', [UserController::class, 'store'])->name('user.store')->middleware('docent');
 
+
+        
+
+        //validar usuario
         Route::get('/user', function (Request $request) {
             return $request->user();
         });

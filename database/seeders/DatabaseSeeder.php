@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Models\Role;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Database\Seeders\DeviceSeeder;
 
 class DatabaseSeeder extends Seeder
 {
@@ -16,6 +17,9 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        //ambientes
+        $this->call(DeviceSeeder::class);
+
         // User::factory(10)->create();
         Role::create([
             "name"=> "administrator",
