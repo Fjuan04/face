@@ -38,7 +38,7 @@ class DeviceSeeder extends Seeder
         ];
 
         foreach ($data as &$item) {
-            $item['ip_address'] = null;
+            $item['ip_address'] = '00000000';
             $item['status'] = 1;
             $item['created_at'] = now();
             $item['updated_at'] = now();
