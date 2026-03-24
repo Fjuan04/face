@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UserController;
+use Illuminate\Support\Carbon;
 use App\Http\Controllers\FaceRecognitionController;
 
 Route::get('/', function () {
@@ -25,4 +26,8 @@ Route::middleware(['auth:sanctum', 'admin'])->group(function () {
     Route::get('/admin/users', function(){
         return response()->json(['res'=>'admin']);
     });
+});
+
+Route::get('hora', function() {
+    return Carbon::now()->toDateString();
 });
