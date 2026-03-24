@@ -1,23 +1,25 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include "esp_camera.h"
+#include <base64.h>
 
 // ╔════════════════════════════════════════════════════════════════╗
-// ║       ESP32-CAM RECONOCIMIENTO FACIAL v1.0                     ║
+// ║       ESP32-CAM RECONOCIMIENTO FACIAL v1                       ║
 // ║       SENA - Sistema de Control de Acceso                      ║
+// ║       Versión compatible con Laravel (multipart/form-data)     ║
 // ╚════════════════════════════════════════════════════════════════╝
 
 // --- CONFIGURACIÓN WIFI ---
-const char* ssid = "SSID";
-const char* password = "PASSWORD";
+const char* ssid     = "EVENTOS";
+const char* password = "SenaEventos_2025*";
 
 // --- CONFIGURACIÓN SERVIDOR ---
-const char* serverUrl = "URL_API";
+const char* serverUrl = "http://10.251.250.104/api/reconocer";
 
 // --- INFORMACIÓN DEL SISTEMA ---
-const char* VERSION = "1.0";
-const char* FECHA_VERSION = "16/02/2026";
-const char* AUTOR = "SENA - Centro de Procesos Industriales y Construccion";
+const char* VERSION      = "1";
+const char* FECHA_VERSION = "13/03/2026";
+const char* AUTOR        = "SENA - Centro de Procesos Industriales y Construccion";
 
 // --- PINES ESP32-CAM (AI-THINKER) ---
 #define PWDN_GPIO_NUM     32
@@ -38,14 +40,14 @@ const char* AUTOR = "SENA - Centro de Procesos Industriales y Construccion";
 #define PCLK_GPIO_NUM     22
 
 // --- PINES DE CONTROL ---
-#define LED_FLASH          4   // LED flash integrado
-#define LED_STATUS        33   // LED de estado
+#define LED_FLASH          4
+#define LED_STATUS        33
 
 // --- CONFIGURACIÓN DEL SISTEMA ---
-#define WIFI_MIN_SIGNAL    -85     // Señal mínima aceptable (dBm)
-#define HTTP_TIMEOUT       30000   // Timeout HTTP en ms (30 segundos)
-#define MAX_RETRY_ENVIO    3       // Número máximo de reintentos
-#define WIFI_MAX_INTENTOS  30      // Intentos de conexión WiFi
+#define WIFI_MIN_SIGNAL    -85
+#define HTTP_TIMEOUT       30000
+#define MAX_RETRY_ENVIO    3
+#define WIFI_MAX_INTENTOS  30
 
 // --- VARIABLES GLOBALES ---
 bool flashHabilitado = false;
@@ -77,50 +79,43 @@ bool testConexionServidor();
 void mostrarBanner();
 void mostrarEstadisticas();
 
+// ─────────────────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
   delay(1000);
-  
+
   mostrarBanner();
-  
+
   tiempoInicio = millis();
 
-  // Configurar pines
   pinMode(LED_FLASH, OUTPUT);
   pinMode(LED_STATUS, OUTPUT);
   digitalWrite(LED_FLASH, LOW);
   digitalWrite(LED_STATUS, LOW);
 
-  // Inicializar cámara
   Serial.println("Inicializando cámara...");
   if (!initCamera()) {
     Serial.println("✗ ERROR CRÍTICO: Fallo al inicializar la cámara");
-    Serial.println("  Verifica las conexiones y reinicia el dispositivo");
     while (true) {
-      digitalWrite(LED_STATUS, HIGH);
-      delay(200);
-      digitalWrite(LED_STATUS, LOW);
-      delay(200);
+      digitalWrite(LED_STATUS, HIGH); delay(200);
+      digitalWrite(LED_STATUS, LOW);  delay(200);
     }
   }
   Serial.println("✓ Cámara inicializada correctamente");
 
-  // Conectar WiFi
   conectarWiFi();
-  
-  // Verificar servidor
+
   Serial.println("\nVerificando conexión con servidor...");
   if (testConexionServidor()) {
     Serial.println("✓ Servidor accesible y funcionando");
   } else {
     Serial.println("⚠ ADVERTENCIA: No se puede alcanzar el servidor");
-    Serial.println("  El sistema continuará, pero las capturas pueden fallar");
     Serial.println("  Verifica que el servidor esté corriendo en: " + String(serverUrl));
   }
 
   mostrarAyuda();
   digitalWrite(LED_STATUS, HIGH);
-  
+
   Serial.println("\n╔════════════════════════════════════════╗");
   Serial.println("║    SISTEMA LISTO PARA OPERAR           ║");
   Serial.println("╚════════════════════════════════════════╝\n");
@@ -136,149 +131,413 @@ void loop() {
     }
     ultimaVerificacion = millis();
   }
-  
+
   // Procesar comandos seriales
   if (Serial.available() > 0) {
     String comando = Serial.readStringUntil('\n');
     comando.trim();
     comando.toUpperCase();
-    
     Serial.println("\n> " + comando);
     procesarComando(comando);
   }
 }
 
+// ─────────────────────────────────────────────────────────────────
+// FUNCIÓN PRINCIPAL DE CAPTURA Y ENVÍO (VERSIÓN MULTIPART/FORM-DATA)
+// Envía la imagen como archivo en formato multipart/form-data
+// Compatible con FaceRecognitionController@process de Laravel
+// ─────────────────────────────────────────────────────────────────
+void capturarYEnviar() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("✗ ERROR: WiFi desconectado");
+    return;
+  }
+
+  Serial.println("  → Capturando imagen...");
+  camera_fb_t* fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("✗ ERROR: Fallo al capturar imagen");
+    return;
+  }
+  Serial.printf("  → Imagen capturada: %d bytes (%dx%d)\n", fb->len, fb->width, fb->height);
+
+  // Obtener IP de la ESP32
+  String ipESP32 = WiFi.localIP().toString();
+
+  // Límite para multipart (depende de la memoria disponible)
+  const size_t MAX_MULTIPART_SIZE = 45000; // Ajustar según necesidad
+
+  if (fb->len > MAX_MULTIPART_SIZE) {
+    Serial.printf("  ⚠ Imagen muy grande (%d bytes). Reduciendo calidad...\n", fb->len);
+    
+    // Intentar reducir calidad si la imagen es muy grande
+    sensor_t* s = esp_camera_sensor_get();
+    if (s != NULL) {
+      int calidadActual = s->status.quality;
+      int nuevaCalidad = calidadActual + 10;
+      if (nuevaCalidad > 63) nuevaCalidad = 63;
+      
+      s->set_quality(s, nuevaCalidad);
+      Serial.printf("  → Calidad ajustada de %d a %d\n", calidadActual, nuevaCalidad);
+      
+      // Liberar buffer anterior y capturar de nuevo
+      esp_camera_fb_return(fb);
+      delay(100);
+      fb = esp_camera_fb_get();
+      if (!fb) {
+        Serial.println("✗ ERROR: Fallo al capturar imagen con calidad reducida");
+        return;
+      }
+      Serial.printf("  → Nueva imagen: %d bytes\n", fb->len);
+    }
+  }
+
+  Serial.println("  → Preparando envío multipart/form-data...");
+
+  bool enviado = false;
+
+  for (int intento = 1; intento <= MAX_RETRY_ENVIO && !enviado; intento++) {
+    if (intento > 1) {
+      Serial.printf("  → Reintento %d de %d...\n", intento, MAX_RETRY_ENVIO);
+      delay(2000);
+    }
+
+    HTTPClient http;
+    http.begin(serverUrl);
+    http.setTimeout(HTTP_TIMEOUT);
+    
+    // Crear límite multipart
+    String boundary = "----ESP32Boundary" + String(random(10000, 99999));
+    String contentType = "multipart/form-data; boundary=" + boundary;
+    
+    http.addHeader("Content-Type", contentType);
+    
+    // Construir el cuerpo multipart
+    String bodyStart = "--" + boundary + "\r\n";
+    bodyStart += "Content-Disposition: form-data; name=\"imagen\"; filename=\"captura.jpg\"\r\n";
+    bodyStart += "Content-Type: image/jpeg\r\n\r\n";
+    
+    String bodyEnd = "\r\n--" + boundary + "--\r\n";
+    
+    // Calcular tamaño total
+    size_t totalSize = bodyStart.length() + fb->len + bodyEnd.length();
+    
+    Serial.printf("  → Tamaño total del envío: %d bytes\n", totalSize);
+    
+    // Enviar usando beginRequest para mayor control
+    http.addHeader("Content-Length", String(totalSize));
+    
+    int httpCode = http.POST((uint8_t*)bodyStart.c_str(), bodyStart.length());
+    
+    if (httpCode == 0) {
+      // Si el primer envío falla, intentamos con el método alternativo
+      WiFiClient *stream = http.getStreamPtr();
+      stream->print(bodyStart);
+      stream->write(fb->buf, fb->len);
+      stream->print(bodyEnd);
+      
+      // Esperar respuesta
+      unsigned long timeout = millis() + 5000;
+      while (!stream->available() && millis() < timeout) {
+        delay(10);
+      }
+      
+      httpCode = http.GET();
+    } else {
+      // Si el primer envío tuvo éxito, enviamos el resto
+      WiFiClient *stream = http.getStreamPtr();
+      stream->write(fb->buf, fb->len);
+      stream->print(bodyEnd);
+    }
+    
+    // Obtener código de respuesta
+    httpCode = http.GET();
+    
+    if (httpCode > 0) {
+      Serial.printf("  ✓ Respuesta HTTP: %d\n", httpCode);
+
+      String respuesta = http.getString();
+      Serial.println("\n  ═══ RESPUESTA DEL SERVIDOR ═══");
+      Serial.println("  " + respuesta);
+
+      if (httpCode == 200) {
+        // ── Acceso concedido ──────────────────────────────────────
+        if (respuesta.indexOf("\"coincidencia\":true") >= 0) {
+          Serial.println("\n  ╔════════════════════════════════════════╗");
+          Serial.println("  ║    ✓✓✓ ACCESO CONCEDIDO ✓✓✓            ║");
+
+          // Extraer nombre si está disponible
+          int idxNombre = respuesta.indexOf("\"nombre\":\"");
+          if (idxNombre >= 0) {
+            idxNombre += 10;
+            int idxFin = respuesta.indexOf("\"", idxNombre);
+            String nombre = respuesta.substring(idxNombre, idxFin);
+            Serial.println("  ║    Bienvenido/a: " + nombre);
+          }
+
+          // Mostrar tipo de evento (entry / exit)
+          int idxTipo = respuesta.indexOf("\"tipo_evento\":\"");
+          if (idxTipo >= 0) {
+            idxTipo += 15;
+            int idxFin = respuesta.indexOf("\"", idxTipo);
+            String tipoEvento = respuesta.substring(idxTipo, idxFin);
+            String etiqueta = (tipoEvento == "entry") ? "ENTRADA" : "SALIDA";
+            Serial.println("  ║    Evento registrado: " + etiqueta);
+          }
+
+          Serial.println("  ╚════════════════════════════════════════╝");
+
+          // Indicación visual de éxito (parpadeo rápido)
+          for (int i = 0; i < 6; i++) {
+            digitalWrite(LED_STATUS, HIGH); delay(100);
+            digitalWrite(LED_STATUS, LOW);  delay(100);
+          }
+          capturasExitosas++;
+
+        // ── Tiempo mínimo no cumplido ─────────────────────────────
+        } else if (respuesta.indexOf("MIN_TIME_NOT_MET") >= 0) {
+          Serial.println("\n  ╔════════════════════════════════════════╗");
+          Serial.println("  ║    ⚠ TIEMPO MÍNIMO NO CUMPLIDO         ║");
+
+          int idxErr = respuesta.indexOf("\"error\":\"");
+          if (idxErr >= 0) {
+            idxErr += 9;
+            int idxFin = respuesta.indexOf("\"", idxErr);
+            Serial.println("  ║    " + respuesta.substring(idxErr, idxFin));
+          }
+          Serial.println("  ╚════════════════════════════════════════╝");
+
+          // Parpadeo lento doble
+          for (int i = 0; i < 4; i++) {
+            digitalWrite(LED_STATUS, HIGH); delay(400);
+            digitalWrite(LED_STATUS, LOW);  delay(400);
+          }
+
+        // ── Acceso denegado (no coincide) ─────────────────────────
+        } else {
+          Serial.println("\n  ╔════════════════════════════════════════╗");
+          Serial.println("  ║    ✗✗✗ ACCESO DENEGADO ✗✗✗             ║");
+
+          if (respuesta.indexOf("NO_FACE_DETECTED") >= 0) {
+            Serial.println("  ║    Causa: No se detectó rostro          ║");
+          } else if (respuesta.indexOf("\"coincidencia\":false") >= 0) {
+            Serial.println("  ║    Causa: Rostro no registrado          ║");
+          }
+          Serial.println("  ╚════════════════════════════════════════╝");
+
+          // Parpadeo lento
+          for (int i = 0; i < 3; i++) {
+            digitalWrite(LED_STATUS, HIGH); delay(300);
+            digitalWrite(LED_STATUS, LOW);  delay(300);
+          }
+        }
+
+        enviado = true;
+
+      } else if (httpCode == 500) {
+        Serial.println("  ⚠ Error del servidor (500). Detalle:");
+        int idxErr = respuesta.indexOf("\"error\":\"");
+        if (idxErr >= 0) {
+          idxErr += 9;
+          int idxFin = respuesta.indexOf("\"", idxErr);
+          Serial.println("  → " + respuesta.substring(idxErr, idxFin));
+        }
+      } else {
+        Serial.printf("  ⚠ Código HTTP inesperado: %d\n", httpCode);
+      }
+
+    } else {
+      Serial.printf("  ✗ Error HTTP: %s\n", http.errorToString(httpCode).c_str());
+    }
+
+    http.end();
+  }
+
+  // Liberar buffer de cámara
+  esp_camera_fb_return(fb);
+
+  if (!enviado) {
+    Serial.println("\n  ╔════════════════════════════════════════╗");
+    Serial.println("  ║  ⚠ NO SE PUDO ENVIAR LA IMAGEN         ║");
+    Serial.println("  ╚════════════════════════════════════════╝");
+    Serial.println("  Recomendaciones:");
+    Serial.println("  1. Verifica que el servidor Laravel esté corriendo");
+    Serial.println("  2. Confirma la URL en serverUrl: " + String(serverUrl));
+    Serial.println("  3. Ejecuta PING para probar conectividad");
+    Serial.println("  4. Ejecuta DIAG para diagnóstico completo");
+    Serial.println("  5. Verifica que el Firewall no esté bloqueando");
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// MÉTODO ALTERNATIVO MÁS SIMPLE (si el anterior no funciona)
+// ─────────────────────────────────────────────────────────────────
+void capturarYEnviarSimple() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("✗ ERROR: WiFi desconectado");
+    return;
+  }
+
+  Serial.println("  → Capturando imagen...");
+  camera_fb_t* fb = esp_camera_fb_get();
+  if (!fb) {
+    Serial.println("✗ ERROR: Fallo al capturar imagen");
+    return;
+  }
+  Serial.printf("  → Imagen capturada: %d bytes\n", fb->len);
+
+  String ipESP32 = WiFi.localIP().toString();
+  
+  Serial.println("  → Preparando envío multipart...");
+
+  // Usar WiFiClient directamente para mayor control
+  WiFiClient client;
+  if (!client.connect(serverUrl, 80)) {
+    Serial.println("  ✗ Error conectando al servidor");
+    esp_camera_fb_return(fb);
+    return;
+  }
+
+  String boundary = "----ESP32Boundary";
+  
+  // Construir encabezados HTTP
+  String headers = "POST " + String(serverUrl) + " HTTP/1.1\r\n";
+  headers += "Host: 10.2.13.193\r\n";
+  headers += "Content-Type: multipart/form-data; boundary=" + boundary + "\r\n";
+  
+  // Calcular tamaño del cuerpo
+  String bodyStart = "--" + boundary + "\r\n";
+  bodyStart += "Content-Disposition: form-data; name=\"imagen\"; filename=\"captura.jpg\"\r\n";
+  bodyStart += "Content-Type: image/jpeg\r\n\r\n";
+  
+  String bodyEnd = "\r\n--" + boundary + "--\r\n";
+  
+  size_t contentLength = bodyStart.length() + fb->len + bodyEnd.length();
+  
+  headers += "Content-Length: " + String(contentLength) + "\r\n";
+  headers += "Connection: close\r\n\r\n";
+  
+  // Enviar todo
+  client.print(headers);
+  client.print(bodyStart);
+  client.write(fb->buf, fb->len);
+  client.print(bodyEnd);
+  
+  Serial.println("  → Datos enviados, esperando respuesta...");
+  
+  // Leer respuesta
+  unsigned long timeout = millis() + 10000;
+  String response = "";
+  while (client.connected() && millis() < timeout) {
+    while (client.available()) {
+      response += client.readString();
+    }
+    delay(10);
+  }
+  
+  Serial.println("  → Respuesta recibida");
+  Serial.println(response);
+  
+  client.stop();
+  esp_camera_fb_return(fb);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// RESTO DE FUNCIONES (igual que antes)
+// ─────────────────────────────────────────────────────────────────
+
 void mostrarBanner() {
   Serial.println("\n\n");
   Serial.println("╔════════════════════════════════════════════════════════════╗");
   Serial.println("║                                                            ║");
-  Serial.println("║     ESP32-CAM SISTEMA DE RECONOCIMIENTO FACIAL v1.0        ║");
+  Serial.println("║     ESP32-CAM SISTEMA DE RECONOCIMIENTO FACIAL v2.1        ║");
+  Serial.println("║     (Compatible con Laravel - multipart/form-data)         ║");
   Serial.println("║                                                            ║");
-  Serial.println("║     SENA - Centro de Procesos Instrudiares y Construccion  ║");
+  Serial.println("║     SENA - Centro de Procesos Industriales y Construccion  ║");
   Serial.println("║     Sistema de Control de Acceso Biométrico                ║");
   Serial.println("║                                                            ║");
   Serial.println("╠════════════════════════════════════════════════════════════╣");
   Serial.println("║  Versión: " + String(VERSION) + "                                             ║");
-  Serial.println("║  Fecha: " + String(FECHA_VERSION) + "                                     ║");
-  Serial.println("║  Red: Funcionarios                                         ║");
+  Serial.println("║  Fecha:   " + String(FECHA_VERSION) + "                                   ║");
+  Serial.println("║  Protocolo: multipart/form-data (Laravel compatible)       ║");
   Serial.println("╚════════════════════════════════════════════════════════════╝");
   Serial.println();
 }
 
 void procesarComando(String cmd) {
-  // ===== CAPTURA DE IMAGEN =====
   if (cmd == "CAPTURAR" || cmd == "FOTO" || cmd == "SCAN" || cmd == "1") {
     ejecutarCaptura();
-  }
-  
-  // ===== INFORMACIÓN DEL SISTEMA =====
-  else if (cmd == "STATUS" || cmd == "INFO") {
+  } else if (cmd == "CAPTURAR_SIMPLE" || cmd == "SIMPLE") {
+    Serial.println("\nUsando método simple de envío...");
+    if (WiFi.status() == WL_CONNECTED) {
+      capturarYEnviarSimple();
+    } else {
+      Serial.println("✗ WiFi desconectado");
+    }
+  } else if (cmd == "STATUS" || cmd == "INFO") {
     mostrarStatus();
-  }
-  else if (cmd == "STATS" || cmd == "ESTADISTICAS") {
+  } else if (cmd == "STATS" || cmd == "ESTADISTICAS") {
     mostrarEstadisticas();
-  }
-  else if (cmd == "DIAGNOSTICO" || cmd == "DIAG" || cmd == "NET") {
+  } else if (cmd == "DIAGNOSTICO" || cmd == "DIAG" || cmd == "NET") {
     diagnosticoRed();
-  }
-  
-  // ===== AYUDA =====
-  else if (cmd == "HELP" || cmd == "AYUDA" || cmd == "?") {
+  } else if (cmd == "HELP" || cmd == "AYUDA" || cmd == "?") {
     mostrarAyuda();
-  }
-  else if (cmd == "VERSION" || cmd == "VER") {
+  } else if (cmd == "VERSION" || cmd == "VER") {
     Serial.println("Sistema de Reconocimiento Facial v" + String(VERSION));
     Serial.println("Fecha: " + String(FECHA_VERSION));
     Serial.println("Autor: " + String(AUTOR));
-  }
-  
-  // ===== CONTROL DEL SISTEMA =====
-  else if (cmd == "REBOOT" || cmd == "REINICIAR" || cmd == "RESET") {
+  } else if (cmd == "REBOOT" || cmd == "REINICIAR" || cmd == "RESET") {
     Serial.println("⚠ Reiniciando sistema...");
     delay(1000);
     ESP.restart();
-  }
-  else if (cmd == "WIFI" || cmd == "RECONECTAR") {
+  } else if (cmd == "WIFI" || cmd == "RECONECTAR") {
     Serial.println("Reconectando WiFi...");
     WiFi.disconnect();
     delay(1000);
     conectarWiFi();
-  }
-  
-  // ===== CONTROL DE HARDWARE =====
-  else if (cmd == "FLASH ON" || cmd == "FLASH_ON") {
+  } else if (cmd == "FLASH ON" || cmd == "FLASH_ON") {
     flashHabilitado = true;
     Serial.println("✓ Flash habilitado");
-  }
-  else if (cmd == "FLASH OFF" || cmd == "FLASH_OFF") {
+  } else if (cmd == "FLASH OFF" || cmd == "FLASH_OFF") {
     flashHabilitado = false;
     Serial.println("✓ Flash deshabilitado");
-  }
-  else if (cmd == "FLASH TEST" || cmd == "FLASH_TEST") {
+  } else if (cmd == "FLASH TEST" || cmd == "FLASH_TEST") {
     testFlash();
-  }
-  else if (cmd == "LED ON" || cmd == "LED_ON") {
+  } else if (cmd == "LED ON" || cmd == "LED_ON") {
     digitalWrite(LED_STATUS, HIGH);
     Serial.println("✓ LED de estado encendido");
-  }
-  else if (cmd == "LED OFF" || cmd == "LED_OFF") {
+  } else if (cmd == "LED OFF" || cmd == "LED_OFF") {
     digitalWrite(LED_STATUS, LOW);
     Serial.println("✓ LED de estado apagado");
-  }
-  else if (cmd == "LED BLINK" || cmd == "LED_BLINK" || cmd == "LED TEST") {
+  } else if (cmd == "LED BLINK" || cmd == "LED_BLINK" || cmd == "LED TEST") {
     testLED();
-  }
-  
-  // ===== PRUEBAS =====
-  else if (cmd == "CAM TEST" || cmd == "CAM_TEST" || cmd == "TEST") {
+  } else if (cmd == "CAM TEST" || cmd == "CAM_TEST" || cmd == "TEST") {
     testCamara();
-  }
-  else if (cmd == "PING") {
+  } else if (cmd == "PING") {
     pingServidor();
-  }
-  
-  // ===== CONFIGURACIÓN DE CALIDAD =====
-  else if (cmd == "CALIDAD BAJA" || cmd == "CALIDAD_BAJA" || cmd == "LOW") {
+  } else if (cmd == "CALIDAD BAJA" || cmd == "CALIDAD_BAJA" || cmd == "LOW") {
     cambiarCalidad(25);
-  }
-  else if (cmd == "CALIDAD MEDIA" || cmd == "CALIDAD_MEDIA" || cmd == "MED") {
+  } else if (cmd == "CALIDAD MEDIA" || cmd == "CALIDAD_MEDIA" || cmd == "MED") {
     cambiarCalidad(15);
-  }
-  else if (cmd == "CALIDAD ALTA" || cmd == "CALIDAD_ALTA" || cmd == "HIGH") {
+  } else if (cmd == "CALIDAD ALTA" || cmd == "CALIDAD_ALTA" || cmd == "HIGH") {
     cambiarCalidad(10);
-  }
-  
-  // ===== CONFIGURACIÓN DE RESOLUCIÓN =====
-  else if (cmd == "SIZE VGA" || cmd == "VGA") {
+  } else if (cmd == "SIZE VGA" || cmd == "VGA") {
     cambiarResolucion(FRAMESIZE_VGA);
-  }
-  else if (cmd == "SIZE SVGA" || cmd == "SVGA") {
+  } else if (cmd == "SIZE SVGA" || cmd == "SVGA") {
     cambiarResolucion(FRAMESIZE_SVGA);
-  }
-  else if (cmd == "SIZE HD" || cmd == "HD") {
+  } else if (cmd == "SIZE HD" || cmd == "HD") {
     cambiarResolucion(FRAMESIZE_HD);
-  }
-  else if (cmd == "SIZE UXGA" || cmd == "UXGA") {
+  } else if (cmd == "SIZE UXGA" || cmd == "UXGA") {
     cambiarResolucion(FRAMESIZE_UXGA);
-  }
-  
-  // ===== INFORMACIÓN DEL SISTEMA =====
-  else if (cmd == "MEM" || cmd == "MEMORIA" || cmd == "RAM") {
+  } else if (cmd == "MEM" || cmd == "MEMORIA" || cmd == "RAM") {
     mostrarMemoria();
-  }
-  else if (cmd == "UPTIME" || cmd == "TIEMPO") {
+  } else if (cmd == "UPTIME" || cmd == "TIEMPO") {
     mostrarUptime();
-  }
-  
-  // ===== UTILIDADES =====
-  else if (cmd == "CLEAR" || cmd == "CLS") {
-    for(int i = 0; i < 50; i++) Serial.println();
+  } else if (cmd == "CLEAR" || cmd == "CLS") {
+    for (int i = 0; i < 50; i++) Serial.println();
     mostrarBanner();
     mostrarAyuda();
-  }
-  
-  // ===== MODO CONTINUO =====
-  else if (cmd.startsWith("AUTO ")) {
+  } else if (cmd.startsWith("AUTO ")) {
     int intervalo = cmd.substring(5).toInt();
     if (intervalo > 0) {
       modoContinuo(intervalo);
@@ -286,37 +545,27 @@ void procesarComando(String cmd) {
       Serial.println("✗ ERROR: Intervalo inválido");
       Serial.println("  Uso correcto: AUTO 5 (captura cada 5 segundos)");
     }
-  }
-  
-  // ===== COMANDO NO RECONOCIDO =====
-  else {
+  } else {
     Serial.println("✗ Comando no reconocido: '" + cmd + "'");
     Serial.println("  Escribe HELP para ver todos los comandos disponibles");
   }
 }
 
 bool testConexionServidor() {
-  if (WiFi.status() != WL_CONNECTED) {
-    return false;
-  }
-  
+  if (WiFi.status() != WL_CONNECTED) return false;
   HTTPClient http;
   http.begin(serverUrl);
   http.setTimeout(5000);
-  
   int codigo = http.GET();
   http.end();
-  
-  return (codigo > 0 && codigo < 400);
+  return (codigo > 0);
 }
 
 void limpiarBufferCamara() {
   Serial.println("  → Limpiando buffer de cámara...");
-  for(int i = 0; i < 3; i++) {
+  for (int i = 0; i < 3; i++) {
     camera_fb_t* fb = esp_camera_fb_get();
-    if (fb) {
-      esp_camera_fb_return(fb);
-    }
+    if (fb) esp_camera_fb_return(fb);
     delay(50);
   }
 }
@@ -326,13 +575,10 @@ bool verificarConexion() {
     Serial.println("  ✗ WiFi desconectado");
     return false;
   }
-  
   int rssi = WiFi.RSSI();
   if (rssi < WIFI_MIN_SIGNAL) {
-    Serial.printf("  ⚠ Señal WiFi débil: %d dBm (mínimo recomendado: %d dBm)\n", rssi, WIFI_MIN_SIGNAL);
-    Serial.println("  → Sugerencia: Acerca la ESP32-CAM al router");
+    Serial.printf("  ⚠ Señal WiFi débil: %d dBm\n", rssi);
   }
-  
   return true;
 }
 
@@ -340,70 +586,39 @@ void diagnosticoRed() {
   Serial.println("\n╔════════════════════════════════════════════════════════════╗");
   Serial.println("║              DIAGNÓSTICO COMPLETO DE RED                   ║");
   Serial.println("╠════════════════════════════════════════════════════════════╣");
-  
-  // Estado WiFi
+
   Serial.print("║ WiFi: ");
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("✓ CONECTADO                                   ║");
-  } else {
-    Serial.println("✗ DESCONECTADO                                ║");
-  }
-  
-  // SSID
-  Serial.println("║ SSID: Funcionarios                                         ║");
-  
-  // IP de la ESP32
+  Serial.println(WiFi.status() == WL_CONNECTED
+    ? "✓ CONECTADO                                   ║"
+    : "✗ DESCONECTADO                                ║");
+
   Serial.print("║ IP ESP32: ");
   String ip = WiFi.localIP().toString();
   Serial.print(ip);
-  for(int i = ip.length(); i < 43; i++) Serial.print(" ");
+  for (int i = ip.length(); i < 43; i++) Serial.print(" ");
   Serial.println("║");
-  
-  // Gateway
+
   Serial.print("║ Gateway: ");
   String gw = WiFi.gatewayIP().toString();
   Serial.print(gw);
-  for(int i = gw.length(); i < 44; i++) Serial.print(" ");
+  for (int i = gw.length(); i < 44; i++) Serial.print(" ");
   Serial.println("║");
-  
-  // DNS
-  Serial.print("║ DNS: ");
-  String dns = WiFi.dnsIP().toString();
-  Serial.print(dns);
-  for(int i = dns.length(); i < 48; i++) Serial.print(" ");
-  Serial.println("║");
-  
-  // Señal WiFi
+
   int rssi = WiFi.RSSI();
-  Serial.print("║ Señal: ");
-  Serial.print(rssi);
-  Serial.print(" dBm ");
-  if (rssi > -50) Serial.print("(Excelente)");
-  else if (rssi > -70) Serial.print("(Buena)    ");
-  else if (rssi > -85) Serial.print("(Regular)  ");
-  else Serial.print("(Mala)     ");
+  Serial.printf("║ Señal: %d dBm", rssi);
+  if (rssi > -50) Serial.print(" (Excelente)");
+  else if (rssi > -70) Serial.print(" (Buena)    ");
+  else if (rssi > -85) Serial.print(" (Regular)  ");
+  else Serial.print(" (Mala)     ");
   Serial.println("                              ║");
-  
-  // Canal WiFi
-  Serial.print("║ Canal WiFi: ");
-  Serial.print(WiFi.channel());
-  Serial.println("                                              ║");
-  
-  // MAC Address
-  Serial.print("║ MAC: ");
-  Serial.print(WiFi.macAddress());
-  Serial.println("                                  ║");
-  
+
   Serial.println("╠════════════════════════════════════════════════════════════╣");
-  
-  // Información del servidor
-  Serial.println("║ Servidor: 10.2.13.193                                      ║");
-  Serial.println("║ Ruta: /face-vanilla-v2/server/index.php                    ║");
-  
+  Serial.println("║ Endpoint: " + String(serverUrl));
+  Serial.println("║ Protocolo: POST / multipart/form-data                      ║");
   Serial.println("╠════════════════════════════════════════════════════════════╣");
-  Serial.println("║ Probando conexión con servidor...                         ║");
+  Serial.println("║ Probando conexión con servidor...                          ║");
   Serial.println("╚════════════════════════════════════════════════════════════╝\n");
-  
+
   pingServidor();
 }
 
@@ -411,11 +626,10 @@ void ejecutarCaptura() {
   Serial.println("\n╔════════════════════════════════════════╗");
   Serial.println("║      INICIANDO CAPTURA                 ║");
   Serial.println("╚════════════════════════════════════════╝");
-  
+
   capturasTotales++;
   digitalWrite(LED_STATUS, LOW);
-  
-  // Verificar conexión WiFi
+
   if (!verificarConexion()) {
     Serial.println("  → Intentando reconectar WiFi...");
     conectarWiFi();
@@ -425,27 +639,21 @@ void ejecutarCaptura() {
       return;
     }
   }
-  
-  // Limpiar buffer de la cámara
+
   limpiarBufferCamara();
-  
-  // Activar flash si está habilitado
+
   if (flashHabilitado) {
     Serial.println("  → Activando flash...");
     digitalWrite(LED_FLASH, HIGH);
     delay(150);
   }
-  
-  // Pequeña pausa para estabilizar la imagen
+
   delay(100);
-  
-  // Capturar y enviar imagen
   capturarYEnviar();
-  
-  // Apagar flash
+
   digitalWrite(LED_FLASH, LOW);
-  
   digitalWrite(LED_STATUS, HIGH);
+
   Serial.println("\n╔════════════════════════════════════════╗");
   Serial.println("║      PROCESO COMPLETADO                ║");
   Serial.println("╚════════════════════════════════════════╝\n");
@@ -453,11 +661,11 @@ void ejecutarCaptura() {
 
 void mostrarAyuda() {
   Serial.println("\n╔════════════════════════════════════════════════════════════╗");
-  Serial.println("║                 COMANDOS DISPONIBLES v1.0                  ║");
+  Serial.println("║                 COMANDOS DISPONIBLES v2.1                  ║");
   Serial.println("╠════════════════════════════════════════════════════════════╣");
-  Serial.println("║                                                            ║");
   Serial.println("║  CAPTURA Y RECONOCIMIENTO                                  ║");
   Serial.println("║  • CAPTURAR, FOTO, SCAN, 1 → Capturar imagen               ║");
+  Serial.println("║  • SIMPLE → Usar método simple de envío                    ║");
   Serial.println("║                                                            ║");
   Serial.println("║  INFORMACIÓN                                               ║");
   Serial.println("║  • STATUS, INFO    → Estado del sistema                    ║");
@@ -472,7 +680,7 @@ void mostrarAyuda() {
   Serial.println("║  • FLASH ON/OFF    → Control del flash                     ║");
   Serial.println("║  • LED ON/OFF      → Control del LED de estado             ║");
   Serial.println("║  • CALIDAD BAJA/MEDIA/ALTA → Calidad de imagen            ║");
-  Serial.println("║  • SIZE VGA/SVGA   → Resolución (VGA recomendado)         ║");
+  Serial.println("║  • SIZE VGA/SVGA/HD/UXGA   → Resolución de imagen         ║");
   Serial.println("║                                                            ║");
   Serial.println("║  PRUEBAS                                                   ║");
   Serial.println("║  • CAM TEST        → Probar cámara                         ║");
@@ -485,64 +693,46 @@ void mostrarAyuda() {
   Serial.println("║  • CLEAR           → Limpiar pantalla                      ║");
   Serial.println("║  • AUTO [seg]      → Modo continuo (ej: AUTO 5)            ║");
   Serial.println("║  • HELP, ?         → Mostrar esta ayuda                    ║");
-  Serial.println("║                                                            ║");
   Serial.println("╚════════════════════════════════════════════════════════════╝\n");
 }
 
 void mostrarStatus() {
   Serial.println("\n╔════════════════════════════════════════════════════════════╗");
-  Serial.println("║                 ESTADO DEL SISTEMA v1.0                    ║");
+  Serial.println("║                 ESTADO DEL SISTEMA v2.1                    ║");
   Serial.println("╠════════════════════════════════════════════════════════════╣");
-  
-  // Estado WiFi
+
   Serial.print("║ WiFi: ");
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("✓ Conectado a 'Funcionarios'                  ║");
-    
-    // IP
+    Serial.println("✓ Conectado                                      ║");
     Serial.print("║ IP: ");
     String ip = WiFi.localIP().toString();
     Serial.print(ip);
-    for(int i = ip.length(); i < 48; i++) Serial.print(" ");
+    for (int i = ip.length(); i < 48; i++) Serial.print(" ");
     Serial.println("║");
-    
-    // Señal
-    int rssi = WiFi.RSSI();
     Serial.print("║ Señal: ");
-    Serial.print(rssi);
-    Serial.print(" dBm");
-    for(int i = String(rssi).length(); i < 44; i++) Serial.print(" ");
-    Serial.println("║");
+    Serial.print(WiFi.RSSI());
+    Serial.println(" dBm                                        ║");
   } else {
     Serial.println("✗ Desconectado                                   ║");
   }
-  
-  // Estado del flash
+
   Serial.print("║ Flash: ");
-  Serial.println(flashHabilitado ? "Habilitado                                        ║" : "Deshabilitado                                     ║");
-  
-  // Memoria
+  Serial.println(flashHabilitado
+    ? "Habilitado                                        ║"
+    : "Deshabilitado                                     ║");
+
   Serial.print("║ RAM Libre: ");
   Serial.print(ESP.getFreeHeap() / 1024);
   Serial.println(" KB                                        ║");
-  
-  // Servidor
+
   Serial.println("║                                                            ║");
-  Serial.println("║ Servidor: 10.2.13.193                                      ║");
-  Serial.println("║ Puerto: 80                                                 ║");
-  
-  // Uptime
+  Serial.println("║ Endpoint: " + String(serverUrl));
+  Serial.println("║ Protocolo: POST / multipart/form-data                      ║");
+
   unsigned long segundos = (millis() - tiempoInicio) / 1000;
-  unsigned long minutos = segundos / 60;
-  unsigned long horas = minutos / 60;
-  Serial.print("║ Uptime: ");
-  Serial.print(horas);
-  Serial.print("h ");
-  Serial.print(minutos % 60);
-  Serial.print("m ");
-  Serial.print(segundos % 60);
-  Serial.println("s                                          ║");
-  
+  Serial.printf("║ Uptime: %luh %lum %lus                                    ║\n",
+    segundos / 3600, (segundos % 3600) / 60, segundos % 60);
+
   Serial.println("╚════════════════════════════════════════════════════════════╝\n");
 }
 
@@ -550,44 +740,33 @@ void mostrarEstadisticas() {
   Serial.println("\n╔════════════════════════════════════════════════════════════╗");
   Serial.println("║              ESTADÍSTICAS DE OPERACIÓN                     ║");
   Serial.println("╠════════════════════════════════════════════════════════════╣");
-  Serial.printf("║ Capturas Totales: %-40d ║\n", capturasTotales);
+  Serial.printf("║ Capturas Totales:  %-39d ║\n", capturasTotales);
   Serial.printf("║ Capturas Exitosas: %-39d ║\n", capturasExitosas);
-  
   if (capturasTotales > 0) {
     float tasa = (capturasExitosas * 100.0) / capturasTotales;
     Serial.printf("║ Tasa de Éxito: %.1f%%                                       ║\n", tasa);
   } else {
     Serial.println("║ Tasa de Éxito: N/A                                        ║");
   }
-  
   unsigned long segundos = (millis() - tiempoInicio) / 1000;
-  unsigned long horas = segundos / 3600;
-  Serial.printf("║ Tiempo de Operación: %lu horas                              ║\n", horas);
+  Serial.printf("║ Tiempo de Operación: %lu horas                              ║\n", segundos / 3600);
   Serial.println("╚════════════════════════════════════════════════════════════╝\n");
 }
 
 void testFlash() {
   Serial.println("\nProbando flash LED...");
-  for(int i = 0; i < 5; i++) {
-    digitalWrite(LED_FLASH, HIGH);
-    Serial.print("■");
-    delay(200);
-    digitalWrite(LED_FLASH, LOW);
-    Serial.print(" ");
-    delay(200);
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(LED_FLASH, HIGH); Serial.print("■"); delay(200);
+    digitalWrite(LED_FLASH, LOW);  Serial.print(" "); delay(200);
   }
   Serial.println("\n✓ Test completado");
 }
 
 void testLED() {
   Serial.println("\nProbando LED de estado...");
-  for(int i = 0; i < 5; i++) {
-    digitalWrite(LED_STATUS, HIGH);
-    Serial.print("●");
-    delay(200);
-    digitalWrite(LED_STATUS, LOW);
-    Serial.print(" ");
-    delay(200);
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(LED_STATUS, HIGH); Serial.print("●"); delay(200);
+    digitalWrite(LED_STATUS, LOW);  Serial.print(" "); delay(200);
   }
   digitalWrite(LED_STATUS, HIGH);
   Serial.println("\n✓ Test completado");
@@ -596,51 +775,44 @@ void testLED() {
 void testCamara() {
   Serial.println("\nProbando cámara...");
   limpiarBufferCamara();
-  
   camera_fb_t* fb = esp_camera_fb_get();
   if (!fb) {
     Serial.println("✗ ERROR: Fallo al capturar imagen de prueba");
     return;
   }
-  
   Serial.printf("✓ Cámara funcionando correctamente\n");
   Serial.printf("  Tamaño: %d bytes\n", fb->len);
   Serial.printf("  Resolución: %dx%d\n", fb->width, fb->height);
   Serial.printf("  Formato: %s\n", fb->format == PIXFORMAT_JPEG ? "JPEG" : "Otro");
-  
   esp_camera_fb_return(fb);
 }
 
 void pingServidor() {
   Serial.println("Probando conexión con servidor...");
-  
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("✗ WiFi desconectado - No se puede hacer ping");
     return;
   }
-  
   HTTPClient http;
   http.begin(serverUrl);
   http.setTimeout(5000);
-  
   unsigned long inicio = millis();
   int codigo = http.GET();
   unsigned long tiempo = millis() - inicio;
-  
   if (codigo > 0) {
     Serial.printf("✓ Servidor alcanzable: HTTP %d (Tiempo: %lu ms)\n", codigo, tiempo);
-    if (codigo == 200) {
-      Serial.println("  Estado: Servidor funcionando correctamente");
+    if (codigo == 405) {
+      Serial.println("  Estado: Endpoint activo (405 esperado en GET sobre ruta POST)");
+    } else if (codigo == 200) {
+      Serial.println("  Estado: Servidor respondiendo OK");
     }
   } else {
     Serial.printf("✗ Error de conexión: %s\n", http.errorToString(codigo).c_str());
-    Serial.println("\n  Posibles causas:");
-    Serial.println("  1. Servidor PHP no está corriendo en 10.2.13.193");
-    Serial.println("  2. Firewall bloqueando el puerto 80");
-    Serial.println("  3. ESP32 y servidor en diferentes subredes");
-    Serial.println("  4. Problema de red entre dispositivos");
+    Serial.println("  Posibles causas:");
+    Serial.println("  1. Servidor Laravel no está corriendo");
+    Serial.println("  2. Firewall bloqueando el puerto");
+    Serial.println("  3. URL incorrecta: " + String(serverUrl));
   }
-  
   http.end();
 }
 
@@ -649,7 +821,6 @@ void cambiarCalidad(int calidad) {
   if (s != NULL) {
     s->set_quality(s, calidad);
     Serial.printf("✓ Calidad de imagen ajustada a %d\n", calidad);
-    Serial.println("  (0 = mejor calidad, 63 = peor calidad)");
   } else {
     Serial.println("✗ ERROR: No se pudo acceder al sensor de la cámara");
   }
@@ -659,15 +830,15 @@ void cambiarResolucion(framesize_t tamaño) {
   sensor_t* s = esp_camera_sensor_get();
   if (s != NULL) {
     s->set_framesize(s, tamaño);
-    String nombreTamaño;
-    switch(tamaño) {
-      case FRAMESIZE_VGA:  nombreTamaño = "VGA (640x480)";    break;
-      case FRAMESIZE_SVGA: nombreTamaño = "SVGA (800x600)";   break;
-      case FRAMESIZE_HD:   nombreTamaño = "HD (1280x720)";    break;
-      case FRAMESIZE_UXGA: nombreTamaño = "UXGA (1600x1200)"; break;
-      default: nombreTamaño = "Desconocido";
+    String nombre;
+    switch (tamaño) {
+      case FRAMESIZE_VGA:  nombre = "VGA (640x480)";    break;
+      case FRAMESIZE_SVGA: nombre = "SVGA (800x600)";   break;
+      case FRAMESIZE_HD:   nombre = "HD (1280x720)";    break;
+      case FRAMESIZE_UXGA: nombre = "UXGA (1600x1200)"; break;
+      default:             nombre = "Desconocido";
     }
-    Serial.println("✓ Resolución cambiada a: " + nombreTamaño);
+    Serial.println("✓ Resolución cambiada a: " + nombre);
   } else {
     Serial.println("✗ ERROR: No se pudo acceder al sensor de la cámara");
   }
@@ -677,39 +848,33 @@ void mostrarMemoria() {
   Serial.println("\n╔════════════════════════════════════════════════════════════╗");
   Serial.println("║              INFORMACIÓN DE MEMORIA                        ║");
   Serial.println("╠════════════════════════════════════════════════════════════╣");
-  
   uint32_t ramTotal = ESP.getHeapSize() / 1024;
   uint32_t ramLibre = ESP.getFreeHeap() / 1024;
   uint32_t ramUsada = ramTotal - ramLibre;
-  float porcentajeUso = (ramUsada * 100.0) / ramTotal;
-  
   Serial.printf("║ RAM Total: %lu KB                                          ║\n", ramTotal);
   Serial.printf("║ RAM Libre: %lu KB                                          ║\n", ramLibre);
-  Serial.printf("║ RAM Usada: %lu KB (%.1f%%)                                  ║\n", ramUsada, porcentajeUso);
-  Serial.println("║                                                            ║");
+  Serial.printf("║ RAM Usada: %lu KB (%.1f%%)                                  ║\n",
+    ramUsada, (ramUsada * 100.0) / ramTotal);
   Serial.print("║ PSRAM: ");
   if (psramFound()) {
-    uint32_t psramLibre = ESP.getFreePsram() / 1024;
-    Serial.printf("Disponible (%lu KB libres)                    ║\n", psramLibre);
+    Serial.printf("Disponible (%lu KB libres)                    ║\n", ESP.getFreePsram() / 1024);
   } else {
     Serial.println("No disponible                                     ║");
   }
-  
   Serial.println("╚════════════════════════════════════════════════════════════╝\n");
 }
 
 void mostrarUptime() {
   unsigned long segundos = (millis() - tiempoInicio) / 1000;
-  unsigned long minutos = segundos / 60;
-  unsigned long horas = minutos / 60;
-  unsigned long dias = horas / 24;
-  
+  unsigned long minutos  = segundos / 60;
+  unsigned long horas    = minutos / 60;
+  unsigned long dias     = horas / 24;
   Serial.println("\n╔════════════════════════════════════════════════════════════╗");
   Serial.println("║              TIEMPO DE OPERACIÓN                           ║");
   Serial.println("╠════════════════════════════════════════════════════════════╣");
-  Serial.printf("║ Días: %-52lu ║\n", dias);
-  Serial.printf("║ Horas: %-51lu ║\n", horas % 24);
-  Serial.printf("║ Minutos: %-49lu ║\n", minutos % 60);
+  Serial.printf("║ Días:     %-48lu ║\n", dias);
+  Serial.printf("║ Horas:    %-48lu ║\n", horas % 24);
+  Serial.printf("║ Minutos:  %-48lu ║\n", minutos % 60);
   Serial.printf("║ Segundos: %-48lu ║\n", segundos % 60);
   Serial.println("╚════════════════════════════════════════════════════════════╝\n");
 }
@@ -720,16 +885,14 @@ void modoContinuo(int intervalo) {
   Serial.println("╚════════════════════════════════════════╝");
   Serial.printf("\nIntervalo: %d segundos\n", intervalo);
   Serial.println("Presiona CUALQUIER TECLA para detener\n");
-  
+
   int contador = 1;
   while (true) {
     Serial.printf("\n═══ Captura Automática #%d ═══\n", contador);
     ejecutarCaptura();
-    
-    // Esperar el intervalo, verificando entrada serial
-    for(int i = 0; i < intervalo * 10; i++) {
+    for (int i = 0; i < intervalo * 10; i++) {
       if (Serial.available() > 0) {
-        Serial.read(); // Limpiar buffer
+        Serial.read();
         Serial.println("\n╔════════════════════════════════════════╗");
         Serial.println("║      MODO CONTINUO DETENIDO            ║");
         Serial.println("╚════════════════════════════════════════╝\n");
@@ -743,286 +906,106 @@ void modoContinuo(int intervalo) {
 
 bool initCamera() {
   camera_config_t config;
-  
-  // Configuración de pines
+
   config.ledc_channel = LEDC_CHANNEL_0;
-  config.ledc_timer = LEDC_TIMER_0;
-  config.pin_d0 = Y2_GPIO_NUM;
-  config.pin_d1 = Y3_GPIO_NUM;
-  config.pin_d2 = Y4_GPIO_NUM;
-  config.pin_d3 = Y5_GPIO_NUM;
-  config.pin_d4 = Y6_GPIO_NUM;
-  config.pin_d5 = Y7_GPIO_NUM;
-  config.pin_d6 = Y8_GPIO_NUM;
-  config.pin_d7 = Y9_GPIO_NUM;
-  config.pin_xclk = XCLK_GPIO_NUM;
-  config.pin_pclk = PCLK_GPIO_NUM;
-  config.pin_vsync = VSYNC_GPIO_NUM;
-  config.pin_href = HREF_GPIO_NUM;
+  config.ledc_timer   = LEDC_TIMER_0;
+  config.pin_d0       = Y2_GPIO_NUM;
+  config.pin_d1       = Y3_GPIO_NUM;
+  config.pin_d2       = Y4_GPIO_NUM;
+  config.pin_d3       = Y5_GPIO_NUM;
+  config.pin_d4       = Y6_GPIO_NUM;
+  config.pin_d5       = Y7_GPIO_NUM;
+  config.pin_d6       = Y8_GPIO_NUM;
+  config.pin_d7       = Y9_GPIO_NUM;
+  config.pin_xclk     = XCLK_GPIO_NUM;
+  config.pin_pclk     = PCLK_GPIO_NUM;
+  config.pin_vsync    = VSYNC_GPIO_NUM;
+  config.pin_href     = HREF_GPIO_NUM;
   config.pin_sscb_sda = SIOD_GPIO_NUM;
   config.pin_sscb_scl = SIOC_GPIO_NUM;
-  config.pin_pwdn = PWDN_GPIO_NUM;
-  config.pin_reset = RESET_GPIO_NUM;
-  
-  // Configuración de imagen
+  config.pin_pwdn     = PWDN_GPIO_NUM;
+  config.pin_reset    = RESET_GPIO_NUM;
+
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
-  
-  // Configuración según disponibilidad de PSRAM
+
   if (psramFound()) {
-    config.frame_size = FRAMESIZE_VGA;  // 640x480 - Óptimo para señal débil
-    config.jpeg_quality = 15;           // Calidad media
-    config.fb_count = 2;                // 2 buffers con PSRAM
+    config.frame_size   = FRAMESIZE_VGA;
+    config.jpeg_quality = 15;
+    config.fb_count     = 2;
     Serial.println("  PSRAM detectado - Usando configuración optimizada");
   } else {
-    config.frame_size = FRAMESIZE_VGA;
+    config.frame_size   = FRAMESIZE_VGA;
     config.jpeg_quality = 20;
-    config.fb_count = 1;
+    config.fb_count     = 1;
     Serial.println("  Sin PSRAM - Usando configuración básica");
   }
 
-  // Inicializar cámara
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
     Serial.printf("  Error al inicializar cámara: 0x%x\n", err);
     return false;
   }
 
-  // Configurar sensor
   sensor_t* s = esp_camera_sensor_get();
   if (s != NULL) {
-    s->set_brightness(s, 0);      // -2 a 2
-    s->set_contrast(s, 0);        // -2 a 2
-    s->set_saturation(s, 0);      // -2 a 2
-    s->set_special_effect(s, 0);  // 0 = sin efecto
-    s->set_whitebal(s, 1);        // Balance de blancos automático
-    s->set_awb_gain(s, 1);        // Ganancia AWB
-    s->set_wb_mode(s, 0);         // Modo balance blancos
-    s->set_exposure_ctrl(s, 1);   // Control exposición automático
-    s->set_aec2(s, 0);            // AEC DSP
-    s->set_ae_level(s, 0);        // -2 a 2
-    s->set_aec_value(s, 300);     // 0 a 1200
-    s->set_gain_ctrl(s, 1);       // Control ganancia automático
-    s->set_agc_gain(s, 0);        // 0 a 30
+    s->set_brightness(s, 0);
+    s->set_contrast(s, 0);
+    s->set_saturation(s, 0);
+    s->set_special_effect(s, 0);
+    s->set_whitebal(s, 1);
+    s->set_awb_gain(s, 1);
+    s->set_wb_mode(s, 0);
+    s->set_exposure_ctrl(s, 1);
+    s->set_aec2(s, 0);
+    s->set_ae_level(s, 0);
+    s->set_aec_value(s, 300);
+    s->set_gain_ctrl(s, 1);
+    s->set_agc_gain(s, 0);
     s->set_gainceiling(s, (gainceiling_t)0);
-    s->set_bpc(s, 0);             // Black pixel correction
-    s->set_wpc(s, 1);             // White pixel correction
-    s->set_raw_gma(s, 1);         // Gamma
-    s->set_lenc(s, 1);            // Lens correction
-    s->set_hmirror(s, 0);         // Espejo horizontal
-    s->set_vflip(s, 0);           // Volteo vertical
-    s->set_dcw(s, 1);             // Downsize
-    s->set_colorbar(s, 0);        // Barra de color (0 = desactivado)
+    s->set_bpc(s, 0);
+    s->set_wpc(s, 1);
+    s->set_raw_gma(s, 1);
+    s->set_lenc(s, 1);
+    s->set_hmirror(s, 0);
+    s->set_vflip(s, 0);
+    s->set_dcw(s, 1);
+    s->set_colorbar(s, 0);
   }
 
   return true;
 }
 
 void conectarWiFi() {
-  Serial.println("\nConectando a WiFi 'Funcionarios'...");
-  
+  Serial.println("\nConectando a WiFi...");
+
   WiFi.mode(WIFI_STA);
-  WiFi.setTxPower(WIFI_POWER_19_5dBm); // Máxima potencia de transmisión
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);
   WiFi.begin(ssid, password);
-  
+
   int intentos = 0;
   while (WiFi.status() != WL_CONNECTED && intentos < WIFI_MAX_INTENTOS) {
     delay(500);
     Serial.print(".");
     intentos++;
   }
-  
   Serial.println();
-  
+
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("✓ WiFi conectado exitosamente");
     Serial.print("  IP asignada: ");
     Serial.println(WiFi.localIP());
-    
     int rssi = WiFi.RSSI();
     Serial.print("  Intensidad de señal: ");
     Serial.print(rssi);
     Serial.print(" dBm ");
-    
-    // Clasificación de señal
-    if (rssi > -50) {
-      Serial.println("(Excelente)");
-    } else if (rssi > -70) {
-      Serial.println("(Buena)");
-    } else if (rssi > -85) {
-      Serial.println("(Regular - Considere acercar al router)");
-    } else {
-      Serial.println("(Mala - ACERQUE LA ESP32 AL ROUTER)");
-      Serial.println("  ⚠ ADVERTENCIA: La señal débil puede causar fallos en la transmisión");
-    }
-    
-    Serial.print("  Canal WiFi: ");
-    Serial.println(WiFi.channel());
-    Serial.print("  Gateway: ");
-    Serial.println(WiFi.gatewayIP());
-    
+    if (rssi > -50)      Serial.println("(Excelente)");
+    else if (rssi > -70) Serial.println("(Buena)");
+    else if (rssi > -85) Serial.println("(Regular)");
+    else                 Serial.println("(Mala)");
   } else {
     Serial.println("✗ ERROR: No se pudo conectar al WiFi");
-    Serial.println("  Verifica que la red 'Funcionarios' esté disponible");
-    Serial.println("  y que la contraseña sea correcta");
+    Serial.print("  Verifica las credenciales para la red: ");
+    Serial.println(ssid);
   }
 }
-
-void capturarYEnviar() {
-  // Verificar WiFi
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("✗ ERROR: WiFi desconectado");
-    return;
-  }
-
-  // Capturar imagen
-  Serial.println("  → Capturando imagen...");
-  camera_fb_t* fb = esp_camera_fb_get();
-  if (!fb) {
-    Serial.println("✗ ERROR: Fallo al capturar imagen");
-    return;
-  }
-
-  Serial.printf("  → Imagen capturada: %d bytes (%dx%d)\n", fb->len, fb->width, fb->height);
-
-  // Intentar enviar con reintentos
-  bool enviado = false;
-  for(int intento = 1; intento <= MAX_RETRY_ENVIO && !enviado; intento++) {
-    if (intento > 1) {
-      Serial.printf("  → Reintento %d de %d...\n", intento, MAX_RETRY_ENVIO);
-      delay(2000); // Espera entre reintentos
-    }
-    
-    HTTPClient http;
-    http.begin(serverUrl);
-    http.setTimeout(HTTP_TIMEOUT);
-    http.setReuse(false);
-
-    // Generar boundary único
-    String boundary = "----ESP32CAM" + String(random(10000, 99999));
-    http.addHeader("Content-Type", "multipart/form-data; boundary=" + boundary);
-    http.addHeader("Connection", "close");
-
-    // Construir cuerpo de la petición
-    String bodyStart = "--" + boundary + "\r\n";
-    bodyStart += "Content-Disposition: form-data; name=\"imagen\"; filename=\"esp32cam.jpg\"\r\n";
-    bodyStart += "Content-Type: image/jpeg\r\n\r\n";
-    
-    String bodyEnd = "\r\n--" + boundary + "--\r\n";
-
-    int totalLen = bodyStart.length() + fb->len + bodyEnd.length();
-    http.addHeader("Content-Length", String(totalLen));
-
-    // Crear buffer completo
-    uint8_t* buffer = (uint8_t*)malloc(totalLen);
-    if (buffer == NULL) {
-      Serial.println("✗ ERROR: Memoria insuficiente para crear el buffer");
-      esp_camera_fb_return(fb);
-      return;
-    }
-
-    // Copiar datos al buffer
-    memcpy(buffer, bodyStart.c_str(), bodyStart.length());
-    memcpy(buffer + bodyStart.length(), fb->buf, fb->len);
-    memcpy(buffer + bodyStart.length() + fb->len, bodyEnd.c_str(), bodyEnd.length());
-
-    // Enviar
-    Serial.println("  → Enviando al servidor...");
-    int httpCode = http.POST(buffer, totalLen);
-
-    // Liberar buffer
-    free(buffer);
-
-    // Procesar respuesta
-    if (httpCode > 0) {
-      Serial.printf("  ✓ Respuesta HTTP: %d\n", httpCode);
-      
-      if (httpCode == 200) {
-        String respuesta = http.getString();
-        Serial.println("\n  ═══ RESPUESTA DEL SERVIDOR ═══");
-        Serial.println("  " + respuesta);
-        
-        // Analizar respuesta JSON
-        if (respuesta.indexOf("\"coincidencia\":true") > 0) {
-          Serial.println("\n  ╔════════════════════════════════════════╗");
-          Serial.println("  ║    ✓✓✓ ACCESO CONCEDIDO ✓✓✓            ║");
-          Serial.println("  ╚════════════════════════════════════════╝");
-          
-          // Indicación visual de éxito
-          for (int i = 0; i < 6; i++) {
-            digitalWrite(LED_STATUS, HIGH);
-            delay(100);
-            digitalWrite(LED_STATUS, LOW);
-            delay(100);
-          }
-          
-          capturasExitosas++;
-          
-        } else {
-          Serial.println("\n  ╔════════════════════════════════════════╗");
-          Serial.println("  ║    ✗✗✗ ACCESO DENEGADO ✗✗✗             ║");
-          Serial.println("  ╚════════════════════════════════════════╝");
-          
-          // Indicación visual de rechazo
-          for (int i = 0; i < 3; i++) {
-            digitalWrite(LED_STATUS, HIGH);
-            delay(300);
-            digitalWrite(LED_STATUS, LOW);
-            delay(300);
-          }
-        }
-        
-        enviado = true;
-        
-      } else {
-        Serial.printf("  ⚠ Código HTTP inesperado: %d\n", httpCode);
-      }
-      
-    } else {
-      Serial.printf("  ✗ Error HTTP: %s\n", http.errorToString(httpCode).c_str());
-    }
-
-    http.end();
-  }
-
-  // Liberar frame buffer
-  esp_camera_fb_return(fb);
-  
-  // Mensaje final si no se pudo enviar
-  if (!enviado) {
-    Serial.println("\n  ╔════════════════════════════════════════╗");
-    Serial.println("  ║  ⚠ NO SE PUDO ENVIAR LA IMAGEN         ║");
-    Serial.println("  ╚════════════════════════════════════════╝");
-    Serial.println("\n  Recomendaciones:");
-    Serial.println("  1. Verifica que el servidor esté corriendo: 10.2.13.193");
-    Serial.println("  2. Ejecuta: PING para probar conectividad");
-    Serial.println("  3. Ejecuta: DIAG para diagnóstico completo");
-    Serial.println("  4. Verifica que el Firewall no esté bloqueando");
-    Serial.println("  5. Acerca la ESP32-CAM al router WiFi");
-  }
-}
-// ```
-
-// ## 📋 **CARACTERÍSTICAS DE LA VERSIÓN 1.0:**
-
-// ✅ **Banner profesional** con información del sistema
-// ✅ **Comandos organizados** y documentados
-// ✅ **Sistema de estadísticas** (capturas totales, exitosas, tasa de éxito)
-// ✅ **Manejo robusto de errores** con mensajes claros
-// ✅ **Diagnóstico completo** de red y sistema
-// ✅ **Código limpio** y bien comentado
-// ✅ **Optimizado** para red "Funcionarios" del SENA
-// ✅ **Sistema de reintentos** para envío de imágenes
-// ✅ **Indicadores visuales** (LED) para estado
-// ✅ **Limpieza de buffer** para imágenes frescas
-// ✅ **Versión documentada** con fecha y autor
-
-// ## 🎯 **COMANDOS PRINCIPALES v1.0:**
-// ```
-// 1         → Capturar imagen
-// STATUS    → Ver estado completo
-// STATS     → Ver estadísticas
-// DIAG      → Diagnóstico de red
-// PING      → Probar servidor
-// HELP      → Ver todos los comandos
-// VERSION   → Ver versión del sistema
