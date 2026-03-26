@@ -55,21 +55,28 @@ class FaceRecognitionController extends Controller
 
                 if ($output === null) {
                     return response()->json([
-                        'error' => 'No se pudo ejecutar el script de Python.'
+                        'success' => false,
+                        'code' => 'ERROR',
+                        'message' => 'No se pudo ejecutar el script de Python.',
+                        'data' => null
                     ], 500);
                 }
 
-                // El script siempre imprime JSON; si no es JSON, tratamos como error
+                // Decodificar el JSON retornado por el script Python
                 $decoded = json_decode($output, true);
-                if (json_last_error() !== JSON_ERROR_NONE) {
+                if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
                     return response()->json([
-                        'error' => 'Error al ejecutar el script de Python.',
-                        'raw_output' => $output,
+                        'success' => false,
+                        'code' => 'ERROR',
+                        'message' => 'Error al ejecutar el script de Python.',
+                        'data' => null
                     ], 500);
                 }
 
-                // Si la coincidencia es verdadera, validar contra CRONODE API
-                if (isset($decoded['coincidencia']) && $decoded['coincidencia'] === true) {
+                $isMinTimeError = isset($decoded['error_code']) && $decoded['error_code'] === 'MIN_TIME_NOT_MET';
+
+                // Si la coincidencia es verdadera y no hay un error de tiempo mínimo, validar contra CRONODE API
+                if (isset($decoded['coincidencia']) && $decoded['coincidencia'] === true && !$isMinTimeError) {
                     $userId = $decoded['id'] ?? null;
                     $userName = $decoded['nombre'] ?? null;
 
@@ -83,61 +90,56 @@ class FaceRecognitionController extends Controller
 
                         if ($response->successful()) {
                             $hasActiveClass = false;
+                            $activeScheduleDetails = null;
                             $responseData = $response->json();
                             $schedules = $responseData['data']['Schedules'] ?? [];
+                            $ambientName = $responseData['data']['name'] ?? 'Ambiente';
                             $now = Carbon::now('America/Bogota');
-                            $currentDay = $now->dayOfWeekIso; // 1 = Lunes ... 7 = Domingo
+                            $currentDay = $now->dayOfWeekIso;
 
                             if (is_array($schedules)) {
-                                // Si la API devuelve un mensaje de error como {"message": "Algo falló"}
-                                if (isset($schedules['message'])) {
-                                    // Ignoramos y dejamos que falle la validación (hasActiveClass = false)
-                                } else {
-                                    // Algunas veces CRONODE puede devolver un solo objeto en lugar de un array
-                                    // Si es asociativo y tiene 'startDate', lo envolvemos en un array de 1 elemento
-                                    if (isset($schedules['startDate'])) {
-                                        $schedules = [$schedules];
-                                    }
+                                if (isset($schedules['startDate'])) {
+                                    $schedules = [$schedules];
+                                }
 
-                                    foreach ($schedules as $schedule) {
-                                        if (!is_array($schedule)) {
-                                            continue;
-                                        }
+                                foreach ($schedules as $schedule) {
+                                    if (!is_array($schedule)) continue;
+                                    if (!isset($schedule['startDate']) || !isset($schedule['endDate'])) continue;
 
-                                        if (!isset($schedule['startDate']) || !isset($schedule['endDate'])) {
-                                            continue;
-                                        }
+                                    $startDate = Carbon::parse($schedule['startDate']);
+                                    $endDate = Carbon::parse($schedule['endDate']);
 
-                                        $startDate = Carbon::parse($schedule['startDate']);
-                                        $endDate = Carbon::parse($schedule['endDate']);
+                                    if ($now->between($startDate, $endDate)) {
+                                        $days = $schedule['day'] ?? [];
+                                        if (!is_array($days)) $days = [$days];
 
-                                        // Validación 1: Fecha actual entre startDate y endDate
-                                        if ($now->between($startDate, $endDate)) {
-                                            
-                                            // Validación 2: Día de la semana coincide
-                                            $days = $schedule['day'] ?? [];
-                                            if (!is_array($days)) {
-                                                $days = [$days];
-                                            }
+                                        if (in_array($currentDay, $days)) {
+                                            if (isset($schedule['startHour']) && isset($schedule['endHour'])) {
+                                                // Buffer de 2 horas para permitir ingresos
+                                                $startHour = Carbon::createFromTimeString($schedule['startHour'], 'America/Bogota')->subHours(2);
+                                                $endHour = Carbon::createFromTimeString($schedule['endHour'], 'America/Bogota')->addHours(2);
 
-                                            if (in_array($currentDay, $days)) {
-                                                
-                                                // Validación 3: Hora actual entre startHour (-2 horas) y endHour (+2 horas)
-                                                if (isset($schedule['startHour']) && isset($schedule['endHour'])) {
-                                                    $startHour = Carbon::createFromTimeString($schedule['startHour'], 'America/Bogota')->subHours(2);
-                                                    $endHour = Carbon::createFromTimeString($schedule['endHour'], 'America/Bogota')->addHours(2);
-                                                    
-                                                    // $now->between(...) maneja la hora actual directamente
-                                                    if ($now->between($startHour, $endHour)) {
+                                                if ($now->between($startHour, $endHour)) {
+                                                    $constantUserId = $schedule['ConstantUserId'] ?? null;
+                                                    $scheduleUsername = $schedule['ConstantUser']['username'] ?? null;
+
+                                                    if ($constantUserId == $userId || $scheduleUsername === $userName) {
+                                                        $hasActiveClass = true;
                                                         
-                                                        // Validación 4: Que el docente sea el reconocido
-                                                        $constantUserId = $schedule['ConstantUserId'] ?? null;
-                                                        $scheduleUsername = $schedule['ConstantUser']['username'] ?? null;
-
-                                                        if ($constantUserId == $userId || $scheduleUsername === $userName) {
-                                                            $hasActiveClass = true;
-                                                            break; // Todo validado, tiene clase
-                                                        }
+                                                        // Capturar detalles del horario para la respuesta
+                                                        $docente = $schedule['ConstantUser']['username'] ?? 'Docente';
+                                                        $clase = $schedule['Programation']['Group']['FormationProgram']['name'] ?? 'Clase';
+                                                        $horarioStr = substr($schedule['startHour'], 0, 5) . ' - ' . substr($schedule['endHour'], 0, 5);
+                                                        
+                                                        $activeScheduleDetails = [
+                                                            'ambient' => $ambientName,
+                                                            'status' => 'Ocupado',
+                                                            'docente' => $docente,
+                                                            'clase' => $clase,
+                                                            'horario' => $horarioStr,
+                                                            'full_message' => "{$ambientName} Ocupado | Docente: {$docente} | Clase: {$clase} | Horario: {$horarioStr}"
+                                                        ];
+                                                        break;
                                                     }
                                                 }
                                             }
@@ -148,41 +150,99 @@ class FaceRecognitionController extends Controller
 
                             if (!$hasActiveClass) {
                                 return response()->json([
-                                    'error' => 'Acceso denegado: El docente no tiene clase programada en este ambiente a esta hora.',
-                                    'coincidencia' => true,
-                                    'hasClass' => false,
-                                    'reconocimiento' => [
+                                    'success' => false,
+                                    'code' => 'NO_CLASS',
+                                    'message' => "Acceso denegado: El docente no tiene clase programada en {$ambientName} a esta hora.",
+                                    'data' => [
                                         'id' => $userId,
                                         'nombre' => $userName,
-                                        'distancia' => $decoded['distancia'] ?? null
+                                        'distancia' => $decoded['distancia'] ?? null,
+                                        'tipo_evento' => null,
+                                        'hasClass' => false,
+                                        'ambient_name' => $ambientName
                                     ]
                                 ], 403);
                             }
 
-                            // Si tiene clase, agregamos hasClass = true a la respuesta del script
+                            // Si tiene clase, agregamos los detalles a la respuesta
                             $decoded['hasClass'] = true;
-                            $decoded['message'] = "Bienvenido, " . ($userName ?? 'Docente') . ". Tienes clase asignada.";
+                            $decoded['message'] = $activeScheduleDetails['full_message'] ?? "Bienvenido. Tienes clase asignada.";
+                            $decoded['schedule_data'] = $activeScheduleDetails;
 
                         } else {
                             // Si la API responde con un error HTTP
                             return response()->json([
-                                'error' => 'Error al conectarse con CRONODE API.',
-                                'status' => $response->status()
+                                'success' => false,
+                                'code' => 'ERROR',
+                                'message' => 'Error al conectarse con CRONODE API.',
+                                'data' => null
                             ], 502);
                         }
                     } catch (Exception $e) {
                         return response()->json([
-                            'error' => 'Excepción de red al contactar CRONODE.',
-                            'detalles' => $e->getMessage()
+                            'success' => false,
+                            'code' => 'ERROR',
+                            'message' => 'Excepción de red al contactar CRONODE.',
+                            'data' => null
                         ], 502);
                     }
                 }
 
-                // Devolver directamente el JSON decodificado como respuesta limpia (Acceso Concedido)
-                return response()->json($decoded);
+                // Construir la estructura estandarizada de respuesta
+                $success = false;
+                $code = 'ERROR';
+                $message = 'Error desconocido';
+
+                // Prioridad a códigos de error explícitos retornados por el script Python
+                $errorCode = $decoded['error_code'] ?? null;
+
+                if (in_array($errorCode, ['NO_FACE_DETECTED_IN_IMAGE', 'IMAGE_READ_ERROR', 'NO_VALID_REGISTERED_FACES'])) {
+                    $code = 'NO_FACE';
+                    $message = $decoded['error'] ?? 'No se detectó ningún rostro válido para comparar.';
+                } elseif ($errorCode === 'MIN_TIME_NOT_MET') {
+                    $code = 'MIN_TIME';
+                    $message = $decoded['error'] ?? 'Tiempo mínimo entre registros no cumplido.';
+                } elseif (array_key_exists('coincidencia', $decoded)) {
+                    if ($decoded['coincidencia'] === true) {
+                        $success = true;
+                        $code = 'ACCESS_GRANTED';
+                        $message = $decoded['message'] ?? 'Acceso concedido';
+                    } else {
+                        // coincidencia === false: rostro detectado pero sin coincidencia en la BD
+                        $code = 'NO_MATCH';
+                        $message = 'Rostro detectado, pero no corresponde a nadie en la base de datos.';
+                    }
+                } elseif ($errorCode !== null) {
+                    // Otros error_code no mapeados
+                    $code = 'ERROR';
+                    $message = $decoded['error'] ?? 'Error interno al procesar el rostro.';
+                } elseif (isset($decoded['error'])) {
+                    // Fallback: error sin error_code
+                    $code = 'ERROR';
+                    $message = $decoded['error'];
+                }
+
+                $data = [
+                    'id' => $decoded['id'] ?? null,
+                    'nombre' => $decoded['nombre'] ?? null,
+                    'distancia' => $decoded['distancia'] ?? null,
+                    'tipo_evento' => $decoded['tipo_evento'] ?? null,
+                    'hasClass' => $decoded['hasClass'] ?? null,
+                    'tiempo_restante' => $decoded['tiempo_restante'] ?? null
+                ];
+
+                return response()->json([
+                    'success' => $success,
+                    'code' => $code,
+                    'message' => $message,
+                    'data' => $data
+                ]);
             } catch (Exception $e) {
                 return response()->json([
-                    "error" => $e->getMessage()
+                    'success' => false,
+                    'code' => 'ERROR',
+                    'message' => $e->getMessage(),
+                    'data' => null
                 ], 500);
             } finally {
                 if (isset($path)) {
@@ -191,6 +251,11 @@ class FaceRecognitionController extends Controller
             }
         }
 
-        return response()->json(['error' => 'No se proporcionó ninguna imagen'], 400);
+        return response()->json([
+            'success' => false,
+            'code' => 'ERROR',
+            'message' => 'No se proporcionó ninguna imagen',
+            'data' => null
+        ], 400);
     }
 }

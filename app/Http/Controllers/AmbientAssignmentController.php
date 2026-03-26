@@ -13,9 +13,12 @@ class AmbientAssignmentController extends Controller
 
     public function ambients()
     {
+        $baseUrl = config('app.api.url');
+        $apiKey = config('app.api.key');
+
         $res = Http::withHeaders([
-            'x-api-key' => config('app.api.key')
-        ])->get(config('app.api.url') . 'api/v1/ambients');
+            'x-api-key' => $apiKey
+        ])->get($baseUrl . 'api/v1/ambients');
 
         if ($res->successful()) {
             // dispositivos asignados
@@ -29,13 +32,68 @@ class AmbientAssignmentController extends Controller
             // Cargas las coordenadas que existan en tu tabla local
             $settings = \App\Models\AmbientSetting::whereIn('ambient_id', $ambientes_asignados->pluck('id'))->get();
 
-            // Mapeo iterando cada ambiente para cruzarle "x" e "y" si están en $settings
-            $data = $ambientes_asignados->map(function ($amb) use ($settings) {
+            $now = \Carbon\Carbon::now('America/Bogota');
+            $currentDay = $now->dayOfWeekIso;
+
+            // Mapeo iterando cada ambiente para cruzarle "x" e "y" y detalles de ocupación
+            $data = $ambientes_asignados->map(function ($amb) use ($settings, $baseUrl, $apiKey, $now, $currentDay) {
                 $setting = $settings->firstWhere('ambient_id',  $amb['id']);
 
                 if ($setting) {
                     $amb['x'] = (float) $setting->x_coordinate;
                     $amb['y'] = (float) $setting->y_coordinate;
+                }
+
+                // Si está ocupado, buscamos los detalles del horario actual
+                if ($amb['isOccupied'] ?? false) {
+                    try {
+                        $schedRes = Http::withHeaders(['x-api-key' => $apiKey])
+                            ->timeout(3)
+                            ->get("{$baseUrl}api/v1/ambients/ambientSchedule/{$amb['id']}");
+                        
+                        if ($schedRes->successful()) {
+                            $schedules = $schedRes->json('data.Schedules') ?? [];
+                            $activeSchedule = null;
+
+                            foreach ($schedules as $schedule) {
+                                $startDate = \Carbon\Carbon::parse($schedule['startDate']);
+                                $endDate = \Carbon\Carbon::parse($schedule['endDate']);
+                                
+                                if ($now->between($startDate, $endDate)) {
+                                    $days = $schedule['day'] ?? [];
+                                    if (!is_array($days)) $days = [$days];
+
+                                    if (in_array($currentDay, $days)) {
+                                        $startHour = \Carbon\Carbon::createFromTimeString($schedule['startHour'], 'America/Bogota');
+                                        $endHour = \Carbon\Carbon::createFromTimeString($schedule['endHour'], 'America/Bogota');
+
+                                        if ($now->between($startHour, $endHour)) {
+                                            $activeSchedule = $schedule;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if ($activeSchedule) {
+                                $docente = $activeSchedule['ConstantUser']['username'] ?? 'No asignado';
+                                $clase = $activeSchedule['Programation']['Group']['FormationProgram']['name'] ?? 'Sin nombre de clase';
+                                $horario = substr($activeSchedule['startHour'], 0, 5) . ' - ' . substr($activeSchedule['endHour'], 0, 5);
+                                
+                                $amb['status_text'] = "Ocupado";
+                                $amb['docente'] = $docente;
+                                $amb['clase'] = $clase;
+                                $amb['horario'] = $horario;
+                                $amb['full_status'] = "Docente: {$docente} | Clase: {$clase} | Horario: {$horario}";
+                            } else {
+                                $amb['status_text'] = "Ocupado (Sin detalles)";
+                            }
+                        }
+                    } catch (\Exception $e) {
+                        // Silently fail or log error
+                    }
+                } else {
+                    $amb['status_text'] = "Disponible (ok)";
                 }
 
                 return $amb;
