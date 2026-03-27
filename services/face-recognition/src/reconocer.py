@@ -267,17 +267,9 @@ def registrar_evento(persona_id, tipo, detalles=None):
             # Por defecto, si llega algo distinto, registramos como entry.
             event_type = 'entry'
 
-        log_message(f"Registrando evento en tabla events - event_type: {event_type}, user_id: {persona_id}, detalles: {detalles}")
-        ahora = datetime.now()
-        cursor.execute(
-            """
-            INSERT INTO events (user_id, device_id, ambient_id, event_type, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """,
-            (persona_id, DISPOSITIVO_ID, 1, event_type, ahora, ahora),
-        )
-        conn.commit()
-        log_message("Evento registrado correctamente en la tabla events")
+        # Ya no insertamos en la tabla events desde Python, 
+        # esto se manejara ahora en el Laravel Controller
+        log_message("Evento validado correctamente (sin inserción en DB a petición de Laravel)")
         return {'success': True, 'tipo': event_type}
         
     except Exception as e:

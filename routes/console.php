@@ -11,3 +11,6 @@ Artisan::command('inspire', function () {
 
 // Ejecutar la limpieza de tokens todos los días a medianoche
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
+
+// Sincronizar horarios de clases locales
+Schedule::command('cronode:sync-ambient-schedules')->dailyAt('00:01');

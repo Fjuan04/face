@@ -44,53 +44,48 @@ class AmbientAssignmentController extends Controller
                     $amb['y'] = (float) $setting->y_coordinate;
                 }
 
-                // Si está ocupado, buscamos los detalles del horario actual
+                // Estructura por defecto para validar en el frontend
+                $amb['docente'] = null;
+                $amb['ficha'] = null;
+                $amb['clase'] = null;
+                $amb['horario'] = null;
+
+                // Si está ocupado, buscamos los detalles del horario actual en DB local
                 if ($amb['isOccupied'] ?? false) {
                     try {
-                        $schedRes = Http::withHeaders(['x-api-key' => $apiKey])
-                            ->timeout(3)
-                            ->get("{$baseUrl}api/v1/ambients/ambientSchedule/{$amb['id']}");
+                        $now = \Carbon\Carbon::now('America/Bogota');
+                        $currentDate = $now->toDateString();
                         
-                        if ($schedRes->successful()) {
-                            $schedules = $schedRes->json('data.Schedules') ?? [];
-                            $activeSchedule = null;
+                        $activeSchedule = \App\Models\AmbientSchedule::where('ambient_id', $amb['id'])
+                            ->where('date', $currentDate)
+                            ->get()
+                            ->filter(function($schedule) use ($now) {
+                                $start = \Carbon\Carbon::parse($schedule->start_time, 'America/Bogota')->subHours(3);
+                                $end = \Carbon\Carbon::parse($schedule->end_time, 'America/Bogota')->addHours(3);
+                                return $now->between($start, $end);
+                            })->first();
 
-                            foreach ($schedules as $schedule) {
-                                $startDate = \Carbon\Carbon::parse($schedule['startDate']);
-                                $endDate = \Carbon\Carbon::parse($schedule['endDate']);
-                                
-                                if ($now->between($startDate, $endDate)) {
-                                    $days = $schedule['day'] ?? [];
-                                    if (!is_array($days)) $days = [$days];
-
-                                    if (in_array($currentDay, $days)) {
-                                        $startHour = \Carbon\Carbon::createFromTimeString($schedule['startHour'], 'America/Bogota');
-                                        $endHour = \Carbon\Carbon::createFromTimeString($schedule['endHour'], 'America/Bogota');
-
-                                        if ($now->between($startHour, $endHour)) {
-                                            $activeSchedule = $schedule;
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-
-                            if ($activeSchedule) {
-                                $docente = $activeSchedule['ConstantUser']['username'] ?? 'No asignado';
-                                $clase = $activeSchedule['Programation']['Group']['FormationProgram']['name'] ?? 'Sin nombre de clase';
-                                $horario = substr($activeSchedule['startHour'], 0, 5) . ' - ' . substr($activeSchedule['endHour'], 0, 5);
-                                
-                                $amb['status_text'] = "Ocupado";
-                                $amb['docente'] = $docente;
-                                $amb['clase'] = $clase;
-                                $amb['horario'] = $horario;
-                                $amb['full_status'] = "Docente: {$docente} | Clase: {$clase} | Horario: {$horario}";
-                            } else {
-                                $amb['status_text'] = "Ocupado (Sin detalles)";
-                            }
+                        if ($activeSchedule) {
+                            $docente = $activeSchedule->teacher_name ?? 'No asignado';
+                            $ficha = $activeSchedule->codeTab ?? 'Sin ficha';
+                            $clase = $activeSchedule->class ?? 'Sin nombre de clase';
+                            
+                            $startFormat = \Carbon\Carbon::parse($activeSchedule->start_time)->format('H:i');
+                            $endFormat = \Carbon\Carbon::parse($activeSchedule->end_time)->format('H:i');
+                            $horario = $startFormat . ' - ' . $endFormat;
+                            
+                            $amb['status_text'] = "Ocupado";
+                            $amb['docente'] = $docente;
+                            $amb['ficha'] = $ficha;
+                            $amb['clase'] = $clase;
+                            $amb['horario'] = $horario;
+                            $amb['full_status'] = "Docente: {$docente} | Ficha: {$ficha} | Clase: {$clase} | Horario: {$horario}";
+                        } else {
+                            $amb['status_text'] = "Ocupado (Sin detalles)";
                         }
                     } catch (\Exception $e) {
                         // Silently fail or log error
+                        $amb['status_text'] = "Ocupado (Error logico local)";
                     }
                 } else {
                     $amb['status_text'] = "Disponible (ok)";
@@ -110,62 +105,4 @@ class AmbientAssignmentController extends Controller
         return response()->json(['message' => 'No se encontraron ambientes'], 404);
     }
 
-
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
-    {
-        //
-        $ambients = Ambient_assignment::all();
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
-    {
-        //
-    }
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(Ambient_assignment $ambient_assignment)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(Ambient_assignment $ambient_assignment)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, Ambient_assignment $ambient_assignment)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Ambient_assignment $ambient_assignment)
-    {
-        //
-    }
 }

@@ -5,6 +5,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\AmbientAssignmentController;
 use App\Http\Controllers\AmbientSettingController;
 use App\Http\Controllers\FaceRecognitionController;
+use App\Http\Controllers\ScheduleController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Http;
@@ -39,6 +40,7 @@ Route::prefix('face')->group(function () {
     Route::post('/2fa/verify', [AuthController::class, 'verifyTwoFactor'])
         ->middleware('throttle:5,1');
 
+    //ambientes
     //ambientes
     Route::get('/ambients', [AmbientAssignmentController::class, 'ambients']);
 
@@ -76,5 +78,9 @@ Route::prefix('face')->group(function () {
         Route::get('/user', function (Request $request) {
             return $request->user();
         });
+
+        // horarios y filtrados (accesibles para admin y docentes con logica interna)
+        Route::get('/schedules', [ScheduleController::class, 'index']);
+        Route::get('/schedules/{id}', [ScheduleController::class, 'show']);
     });
 });

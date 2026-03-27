@@ -81,110 +81,133 @@ class FaceRecognitionController extends Controller
                     $userName = $decoded['nombre'] ?? null;
 
                     $cronodeBaseUrl = env('API_BASE_URL', 'http://ejemplo-cronode.com');
-                    $cronodeApiKey = env('API_KEY', 'default_key');
-
                     try {
-                        $response = Http::withHeaders([
-                            'x-api-key' => $cronodeApiKey,
-                        ])->timeout(5)->get("{$cronodeBaseUrl}api/v1/ambients/ambientSchedule/{$ambientId}");
+                        $now = Carbon::now('America/Bogota');
+                        $currentDate = $now->toDateString();
 
-                        if ($response->successful()) {
-                            $hasActiveClass = false;
-                            $activeScheduleDetails = null;
-                            $responseData = $response->json();
-                            $schedules = $responseData['data']['Schedules'] ?? [];
-                            $ambientName = $responseData['data']['name'] ?? 'Ambiente';
-                            $now = Carbon::now('America/Bogota');
-                            $currentDay = $now->dayOfWeekIso;
+                        $schedules = \App\Models\AmbientSchedule::where('ambient_id', $ambientId)
+                            ->where('date', $currentDate)
+                            ->get();
 
-                            if (is_array($schedules)) {
-                                if (isset($schedules['startDate'])) {
-                                    $schedules = [$schedules];
-                                }
+                        $hasActiveClass = false;
+                        $activeScheduleDetails = null;
+                        $activeSchedule = null;
 
-                                foreach ($schedules as $schedule) {
-                                    if (!is_array($schedule)) continue;
-                                    if (!isset($schedule['startDate']) || !isset($schedule['endDate'])) continue;
+                        foreach ($schedules as $schedule) {
+                            $startHour = Carbon::parse($schedule->start_time, 'America/Bogota')->subHours(3);
+                            $endHour = Carbon::parse($schedule->end_time, 'America/Bogota')->addHours(3);
 
-                                    $startDate = Carbon::parse($schedule['startDate']);
-                                    $endDate = Carbon::parse($schedule['endDate']);
-
-                                    if ($now->between($startDate, $endDate)) {
-                                        $days = $schedule['day'] ?? [];
-                                        if (!is_array($days)) $days = [$days];
-
-                                        if (in_array($currentDay, $days)) {
-                                            if (isset($schedule['startHour']) && isset($schedule['endHour'])) {
-                                                // Buffer de 2 horas para permitir ingresos
-                                                $startHour = Carbon::createFromTimeString($schedule['startHour'], 'America/Bogota')->subHours(2);
-                                                $endHour = Carbon::createFromTimeString($schedule['endHour'], 'America/Bogota')->addHours(2);
-
-                                                if ($now->between($startHour, $endHour)) {
-                                                    $constantUserId = $schedule['ConstantUserId'] ?? null;
-                                                    $scheduleUsername = $schedule['ConstantUser']['username'] ?? null;
-
-                                                    if ($constantUserId == $userId || $scheduleUsername === $userName) {
-                                                        $hasActiveClass = true;
-                                                        
-                                                        // Capturar detalles del horario para la respuesta
-                                                        $docente = $schedule['ConstantUser']['username'] ?? 'Docente';
-                                                        $clase = $schedule['Programation']['Group']['FormationProgram']['name'] ?? 'Clase';
-                                                        $horarioStr = substr($schedule['startHour'], 0, 5) . ' - ' . substr($schedule['endHour'], 0, 5);
-                                                        
-                                                        $activeScheduleDetails = [
-                                                            'ambient' => $ambientName,
-                                                            'status' => 'Ocupado',
-                                                            'docente' => $docente,
-                                                            'clase' => $clase,
-                                                            'horario' => $horarioStr,
-                                                            'full_message' => "{$ambientName} Ocupado | Docente: {$docente} | Clase: {$clase} | Horario: {$horarioStr}"
-                                                        ];
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
+                            if ($now->between($startHour, $endHour)) {
+                                if ($schedule->user_id == $userId) {
+                                    $hasActiveClass = true;
+                                    $activeSchedule = $schedule;
+                                    
+                                    $horarioStr = Carbon::parse($schedule->start_time)->format('H:i') . ' - ' . Carbon::parse($schedule->end_time)->format('H:i');
+                                    $docente = $userName ?? 'Docente';
+                                    $ficha = $schedule->codeTab ?? 'Ficha';
+                                    $clase = $schedule->class ?? 'Clase';
+                                    
+                                    $activeScheduleDetails = [
+                                        'ambient' => "Ambiente {$ambientId}",
+                                        'status' => 'Ocupado',
+                                        'docente' => $docente,
+                                        'ficha' => $ficha,
+                                        'clase' => $clase,
+                                        'horario' => $horarioStr,
+                                        'full_message' => "Ambiente {$ambientId} Ocupado | Docente: {$docente} | Ficha: {$ficha} | Clase: {$clase} | Horario: {$horarioStr}"
+                                    ];
+                                    break;
                                 }
                             }
+                        }
 
-                            if (!$hasActiveClass) {
-                                return response()->json([
-                                    'success' => false,
-                                    'code' => 'NO_CLASS',
-                                    'message' => "Acceso denegado: El docente no tiene clase programada en {$ambientName} a esta hora.",
-                                    'data' => [
-                                        'id' => $userId,
-                                        'nombre' => $userName,
-                                        'distancia' => $decoded['distancia'] ?? null,
-                                        'tipo_evento' => null,
-                                        'hasClass' => false,
-                                        'ambient_name' => $ambientName
-                                    ]
-                                ], 403);
-                            }
-
-                            // Si tiene clase, agregamos los detalles a la respuesta
-                            $decoded['hasClass'] = true;
-                            $decoded['message'] = $activeScheduleDetails['full_message'] ?? "Bienvenido. Tienes clase asignada.";
-                            $decoded['schedule_data'] = $activeScheduleDetails;
-
-                        } else {
-                            // Si la API responde con un error HTTP
+                        if (!$hasActiveClass) {
                             return response()->json([
                                 'success' => false,
-                                'code' => 'ERROR',
-                                'message' => 'Error al conectarse con CRONODE API.',
-                                'data' => null
-                            ], 502);
+                                'code' => 'NO_CLASS',
+                                'message' => "Acceso denegado: El docente no tiene clase programada en este ambiente a esta hora.",
+                                'data' => [
+                                    'id' => $userId,
+                                    'nombre' => $userName,
+                                    'distancia' => $decoded['distancia'] ?? null,
+                                    'tipo_evento' => null,
+                                    'hasClass' => false,
+                                    'ambient_name' => "Ambiente {$ambientId}"
+                                ]
+                            ], 403);
                         }
-                    } catch (Exception $e) {
+
+                        // === LOGICA DE ENTRADA, DESCANSO Y SALIDA (Reemplazando a Python) ===
+                        $tipoEvento = 'entry';
+                        $isOccupied = true;
+
+                        if (is_null($activeSchedule->open_by)) {
+                            // 1. ENTRADA INICIAL
+                            $activeSchedule->open_by = $userId;
+                            $activeSchedule->save();
+
+                            \App\Models\Event::create([
+                                'user_id' => $userId,
+                                'device_id' => 1,
+                                'ambient_id' => $ambientId,
+                                'event_type' => 'entry',
+                            ]);
+
+                            $tipoEvento = 'entry';
+                            $isOccupied = true;
+
+                        } elseif (!is_null($activeSchedule->open_by) && is_null($activeSchedule->closed_by)) {
+                            // 2. RETORNO DE DESCANSO O SALIDA
+                            if ($activeSchedule->break_time == 1 && is_null($activeSchedule->end_break)) {
+                                // Viene de descanso
+                                $activeSchedule->end_break = now();
+                                $activeSchedule->save();
+                                
+                                $tipoEvento = 'entry'; // ESP32 abre puerta
+                                $isOccupied = true;
+                                // NO insertamos en la tabla events
+                            } else {
+                                // 3. SALIDA DEFINITIVA
+                                $activeSchedule->closed_by = $userId;
+                                $activeSchedule->save();
+
+                                \App\Models\Event::create([
+                                    'user_id' => $userId,
+                                    'device_id' => 1,
+                                    'ambient_id' => $ambientId,
+                                    'event_type' => 'exit',
+                                ]);
+
+                                $tipoEvento = 'exit';
+                                $isOccupied = false;
+                            }
+                        } else {
+                            // Ya estaba cerrado, lo marcamos como salida por defecto
+                            $tipoEvento = 'exit';
+                            $isOccupied = false;
+                        }
+
+                        $decoded['tipo_evento'] = $tipoEvento;
+
+                        // Si tiene clase, agregamos los detalles a la respuesta
+                        $decoded['hasClass'] = true;
+                        $decoded['message'] = $activeScheduleDetails['full_message'] ?? "Bienvenido. Tienes clase asignada.";
+                        $decoded['schedule_data'] = $activeScheduleDetails;
+
+                        // Notificamos a Cronode de forma síncrona para que se actualice al instante sin depender de la cola
+                        try {
+                            \App\Jobs\NotifyCronodeOccupied::dispatchSync($ambientId, $isOccupied);
+                        } catch (\Exception $e) {
+                            \Illuminate\Support\Facades\Log::error("Error avisando a CRONODE: " . $e->getMessage());
+                        }
+
+                    } catch (\Exception $e) {
                         return response()->json([
                             'success' => false,
                             'code' => 'ERROR',
-                            'message' => 'Excepción de red al contactar CRONODE.',
+                            'message' => 'Excepción de base de datos local al validar el horario.',
                             'data' => null
-                        ], 502);
+                        ], 500);
                     }
                 }
 
