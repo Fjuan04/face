@@ -269,7 +269,7 @@ def registrar_evento(persona_id, tipo, detalles=None):
 
         # Ya no insertamos en la tabla events desde Python, 
         # esto se manejara ahora en el Laravel Controller
-        log_message("Evento validado correctamente (sin inserción en DB a petición de Laravel)")
+        log_message(f"Evento validado correctamente (sin inserción en DB a petición de Laravel) - event_type: {event_type}, user_id: {persona_id}, detalles: {detalles}")
         return {'success': True, 'tipo': event_type}
         
     except Exception as e:
