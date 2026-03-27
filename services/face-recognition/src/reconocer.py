@@ -267,17 +267,7 @@ def registrar_evento(persona_id, tipo, detalles=None):
             # Por defecto, si llega algo distinto, registramos como entry.
             event_type = 'entry'
 
-        log_message(f"Registrando evento en tabla events - event_type: {event_type}, user_id: {persona_id}, detalles: {detalles}")
-        ahora = datetime.now()
-        cursor.execute(
-            """
-            INSERT INTO events (user_id, device_id, ambient_id, event_type, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """,
-            (persona_id, DISPOSITIVO_ID, 1, event_type, ahora, ahora),
-        )
-        conn.commit()
-        log_message("Evento registrado correctamente en la tabla events")
+        log_message(f"Modo solo consulta: evento NO insertado - event_type: {event_type}, user_id: {persona_id}, detalles: {detalles}")
         return {'success': True, 'tipo': event_type}
         
     except Exception as e:
