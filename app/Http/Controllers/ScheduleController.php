@@ -11,7 +11,7 @@ class ScheduleController extends Controller
 {
     /**
      * Listado filtrado de horarios (clases)
-     * 
+     *
      * GET /api/face/schedules?date=2026-03-27&ambient_id=11&user_id=5
      */
     public function index(Request $request)
@@ -19,7 +19,7 @@ class ScheduleController extends Controller
         $user = auth()->user();
         $query = AmbientSchedule::query();
 
-        // RESTRICCIÓN POR ROL: 
+        // RESTRICCIÓN POR ROL:
         // Si no es admin (role_id != 1), solo puede ver sus propias clases
         if ($user->role_id != 1) {
             $query->where('user_id', $user->id);
@@ -68,7 +68,7 @@ class ScheduleController extends Controller
 
     /**
      * Detalle completo de una clase incluyendo sus eventos (logs) registrados
-     * 
+     *
      * GET /api/face/schedules/{id}
      */
     public function show($id)

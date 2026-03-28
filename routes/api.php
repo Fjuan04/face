@@ -63,17 +63,17 @@ Route::prefix('face')->group(function () {
             Route::post('/ambient-settings', [AmbientSettingController::class, 'setCoordinates']);
 
 
-            //registro 1. buscar el docente
+            // buscar el instructor
             Route::post('/search/docent', [UserController::class, 'search'])
             ->name('search.docent');
-            });
 
             // guardar instructor
             Route::post('/docent', [UserController::class, 'store'])
                 ->name('docent.store');
+            
+            });
 
-
-
+            
         //validar usuario
         Route::get('/user', function (Request $request) {
             return $request->user();
