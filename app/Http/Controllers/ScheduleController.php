@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AmbientSchedule;
+use App\Models\Device;
 use App\Models\Event;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
@@ -51,8 +52,16 @@ class ScheduleController extends Controller
         }
 
         $schedules = $query->orderBy('start_time', 'asc')->get();
+        
+        foreach($schedules as &$class){
+            //ambiente
+            $ambient = Device::where('ambient_id',$class['ambient_id'])->first();
+            //Nombre del ambiente
+            $class['ambient'] = $ambient->name ;
+        }
 
-        return response()->json([
+ 
+        return response()->json([   
             'success' => true,
             'role' => ($user->role_id == 1) ? 'admin' : 'docente',
             'filters' => [
@@ -75,7 +84,7 @@ class ScheduleController extends Controller
     {
         $user = auth()->user();
         $schedule = AmbientSchedule::find($id);
-
+        $schedule['ambient'] = Device::where('ambient_id', $schedule['ambient_id'])->first()->name;
         if (!$schedule) {
             return response()->json([
                 'success' => false,
