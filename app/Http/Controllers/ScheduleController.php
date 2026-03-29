@@ -7,6 +7,8 @@ use App\Models\Device;
 use App\Models\Event;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
+use App\Exports\SchedulesExport;
+use Maatwebsite\Excel\Facades\Excel;
 
 class ScheduleController extends Controller
 {
@@ -120,5 +122,29 @@ class ScheduleController extends Controller
                 'logs' => $events
             ]
         ]);
+    }
+
+    /**
+     * Exportar horarios a Excel
+     *
+     * GET /api/face/schedules/export?start_date=2024-03-01&end_date=2024-03-07
+     */
+    public function export(Request $request)
+    {
+        $request->validate([
+            'start_date' => 'required|date',
+            'end_date' => 'required|date|after_or_equal:start_date',
+        ]);
+
+        $user = auth()->user();
+        $isAdmin = ($user->role_id == 1);
+        $userId = $user->id;
+
+        $fileName = 'horarios_' . $request->start_date . '_a_' . $request->end_date . '.xlsx';
+
+        return Excel::download(
+            new SchedulesExport($request->start_date, $request->end_date, $userId, $isAdmin),
+            $fileName
+        );
     }
 }

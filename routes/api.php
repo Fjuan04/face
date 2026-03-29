@@ -80,6 +80,7 @@ Route::prefix('face')->group(function () {
         });
 
         // horarios y filtrados (accesibles para admin y docentes con logica interna)
+        Route::get('/schedules/export', [ScheduleController::class, 'export']);
         Route::get('/schedules', [ScheduleController::class, 'index']);
         Route::get('/schedules/{id}', [ScheduleController::class, 'show']);
     });
