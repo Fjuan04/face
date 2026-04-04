@@ -73,7 +73,14 @@ Route::prefix('face')->group(function () {
             // guardar instructor
             Route::post('/docent', [UserController::class, 'store'])
                 ->name('docent.store');
-            
+
+            // asignar permiso a clase/horario
+            Route::post('/schedules/{id}/permission', [ScheduleController::class, 'assignPermission'])
+                ->name('schedules.permission');
+
+            // listar usuarios del sistema
+            Route::get('/users', [UserController::class, 'index'])
+                ->name('users.index');
             });
 
             

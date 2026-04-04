@@ -33,9 +33,15 @@ class ScheduleController extends Controller
             }
         }
 
-        // 1. Filtrar por Fecha específica (por defecto HOY)
-        $date = $request->input('date', Carbon::now('America/Bogota')->toDateString());
-        $query->whereDate('date', $date);
+        // 1. Filtrar por Fecha específica (por defecto HOY, a menos que envíe date=all)
+        if ($request->input('date') === 'all') {
+            // Retorna desde hoy en adelante para no saturar con el historial pasado
+            $query->where('date', '>=', Carbon::now('America/Bogota')->toDateString());
+            $date = 'all'; 
+        } else {
+            $date = $request->input('date', Carbon::now('America/Bogota')->toDateString());
+            $query->whereDate('date', $date);
+        }
 
         // 2. Filtrar por Ambiente
         if ($request->has('ambient_id')) {
@@ -146,5 +152,37 @@ class ScheduleController extends Controller
             new SchedulesExport($request->start_date, $request->end_date, $userId, $isAdmin),
             $fileName
         );
+    }
+    /**
+     * Asignar permiso a un docente externo para una clase
+     * 
+     * POST /api/face/schedules/{id}/permission
+     */
+    public function assignPermission(Request $request, $id)
+    {
+        $request->validate([
+            'admin_permission' => 'required|boolean',
+            'user_allowed' => 'nullable|exists:users,id'
+        ]);
+
+        $schedule = AmbientSchedule::find($id);
+
+        if (!$schedule) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Horario no encontrado'
+            ], 404);
+        }
+
+        $schedule->admin_permission = $request->admin_permission;
+        $schedule->user_allowed = $request->admin_permission ? $request->user_allowed : null;
+        $schedule->granted_by = auth()->id();
+        $schedule->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Permiso actualizado correctamente',
+            'data' => $schedule
+        ]);
     }
 }

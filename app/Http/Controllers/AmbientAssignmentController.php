@@ -49,43 +49,48 @@ class AmbientAssignmentController extends Controller
                 $amb['ficha'] = null;
                 $amb['clase'] = null;
                 $amb['horario'] = null;
+                $amb['schedule_id'] = null;
 
-                // Si está ocupado, buscamos los detalles del horario actual en DB local
-                if ($amb['isOccupied'] ?? false) {
-                    try {
-                        $now = \Carbon\Carbon::now('America/Bogota');
-                        $currentDate = $now->toDateString();
+                try {
+                    $now = \Carbon\Carbon::now('America/Bogota');
+                    $currentDate = $now->toDateString();
+                    
+                    $activeSchedule = \App\Models\AmbientSchedule::where('ambient_id', $amb['id'])
+                        ->where('date', $currentDate)
+                        ->get()
+                        ->filter(function($schedule) use ($now) {
+                            $start = \Carbon\Carbon::parse($schedule->start_time, 'America/Bogota')->subHours(3);
+                            $end = \Carbon\Carbon::parse($schedule->end_time, 'America/Bogota')->addHours(3);
+                            return $now->between($start, $end);
+                        })->first();
+
+                    if ($activeSchedule) {
+                        $amb['schedule_id'] = $activeSchedule->id;
+                        $docente = $activeSchedule->teacher_name ?? 'No asignado';
+                        $ficha = $activeSchedule->codeTab ?? 'Sin ficha';
+                        $clase = $activeSchedule->class ?? 'Sin nombre de clase';
                         
-                        $activeSchedule = \App\Models\AmbientSchedule::where('ambient_id', $amb['id'])
-                            ->where('date', $currentDate)
-                            ->get()
-                            ->filter(function($schedule) use ($now) {
-                                $start = \Carbon\Carbon::parse($schedule->start_time, 'America/Bogota')->subHours(3);
-                                $end = \Carbon\Carbon::parse($schedule->end_time, 'America/Bogota')->addHours(3);
-                                return $now->between($start, $end);
-                            })->first();
+                        $startFormat = \Carbon\Carbon::parse($activeSchedule->start_time)->format('H:i');
+                        $endFormat = \Carbon\Carbon::parse($activeSchedule->end_time)->format('H:i');
+                        $horario = $startFormat . ' - ' . $endFormat;
+                        
+                        $amb['docente'] = $docente;
+                        $amb['ficha'] = $ficha;
+                        $amb['clase'] = $clase;
+                        $amb['horario'] = $horario;
+                        $amb['full_status'] = "Docente: {$docente} | Ficha: {$ficha} | Clase: {$clase} | Horario: {$horario}";
+                    }
+                } catch (\Exception $e) {
+                    // Silently fail or log error
+                    $amb['status_text'] = "Error logico local";
+                }
 
-                        if ($activeSchedule) {
-                            $docente = $activeSchedule->teacher_name ?? 'No asignado';
-                            $ficha = $activeSchedule->codeTab ?? 'Sin ficha';
-                            $clase = $activeSchedule->class ?? 'Sin nombre de clase';
-                            
-                            $startFormat = \Carbon\Carbon::parse($activeSchedule->start_time)->format('H:i');
-                            $endFormat = \Carbon\Carbon::parse($activeSchedule->end_time)->format('H:i');
-                            $horario = $startFormat . ' - ' . $endFormat;
-                            
-                            $amb['status_text'] = "Ocupado";
-                            $amb['docente'] = $docente;
-                            $amb['ficha'] = $ficha;
-                            $amb['clase'] = $clase;
-                            $amb['horario'] = $horario;
-                            $amb['full_status'] = "Docente: {$docente} | Ficha: {$ficha} | Clase: {$clase} | Horario: {$horario}";
-                        } else {
-                            $amb['status_text'] = "Ocupado (Sin detalles)";
-                        }
-                    } catch (\Exception $e) {
-                        // Silently fail or log error
-                        $amb['status_text'] = "Ocupado (Error logico local)";
+                // Resolviendo status text en base a CRONODE
+                if ($amb['isOccupied'] ?? false) {
+                    if (isset($amb['schedule_id'])) {
+                        $amb['status_text'] = "Ocupado";
+                    } else {
+                        $amb['status_text'] = "Ocupado (Sin detalles)";
                     }
                 } else {
                     $amb['status_text'] = "Disponible (ok)";

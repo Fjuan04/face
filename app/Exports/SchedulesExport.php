@@ -26,7 +26,10 @@ class SchedulesExport implements FromQuery, WithHeadings, WithMapping
     {
         $query = DB::table('ambient_schedules')
             ->join('devices', 'ambient_schedules.ambient_id', '=', 'devices.ambient_id')
+            ->leftJoin('users', 'ambient_schedules.open_by', '=', 'users.id')
             ->select(
+                'ambient_schedules.id as schedule_id',
+                'ambient_schedules.ambient_id',
                 'devices.name as ambient_name',
                 'ambient_schedules.teacher_name',
                 'ambient_schedules.codeTab',
@@ -37,7 +40,10 @@ class SchedulesExport implements FromQuery, WithHeadings, WithMapping
                 'ambient_schedules.break_time',
                 'ambient_schedules.start_break',
                 'ambient_schedules.end_break',
-                'ambient_schedules.user_id'
+                'ambient_schedules.user_id',
+                'users.fullname as opened_by_name',
+                'ambient_schedules.open_by',
+                'ambient_schedules.closed_by'
             )
             ->whereBetween('ambient_schedules.date', [$this->startDate, $this->endDate]);
 
@@ -61,7 +67,10 @@ class SchedulesExport implements FromQuery, WithHeadings, WithMapping
             'Fecha',
             'Hora inicio',
             'Hora fin',
-            'Descanso'
+            'Descanso',
+            'Abierto por',
+            'Hora apertura',
+            'Hora cierre'
         ];
     }
 
@@ -83,6 +92,35 @@ class SchedulesExport implements FromQuery, WithHeadings, WithMapping
             $breakDuration = 'En curso';
         }
 
+        $horaApertura = 'No abierto';
+        $horaCierre = 'No cerrado';
+
+        if ($row->open_by) {
+            $entryEvent = \App\Models\Event::where('ambient_id', $row->ambient_id)
+                ->where('user_id', $row->open_by)
+                ->whereDate('created_at', $row->date)
+                ->where('event_type', 'entry')
+                ->orderBy('created_at', 'asc')
+                ->first();
+                
+            if ($entryEvent) {
+                $horaApertura = $entryEvent->created_at->format('H:i:s');
+            }
+        }
+        
+        if ($row->closed_by) {
+            $exitEvent = \App\Models\Event::where('ambient_id', $row->ambient_id)
+                ->where('user_id', $row->closed_by)
+                ->whereDate('created_at', $row->date)
+                ->where('event_type', 'exit')
+                ->orderBy('created_at', 'desc')
+                ->first();
+                
+            if ($exitEvent) {
+                $horaCierre = $exitEvent->created_at->format('H:i:s');
+            }
+        }
+
         return [
             $row->ambient_name,
             $row->teacher_name,
@@ -92,6 +130,9 @@ class SchedulesExport implements FromQuery, WithHeadings, WithMapping
             $row->start_time,
             $row->end_time,
             $breakDuration,
+            $row->opened_by_name ?? 'No abierto',
+            $horaApertura,
+            $horaCierre,
         ];
     }
 }

@@ -82,7 +82,12 @@ class FaceRecognitionController extends Controller
 
                     $cronodeBaseUrl = env('API_BASE_URL', 'http://ejemplo-cronode.com');
                     try {
-                        $now = Carbon::now('America/Bogota');
+                        if ($request->has('simulated_time') && !empty($request->input('simulated_time'))) {
+                            $now = Carbon::parse($request->input('simulated_time'), 'America/Bogota');
+                        } else {
+                            $now = Carbon::now('America/Bogota');
+                        }
+                        
                         $currentDate = $now->toDateString();
 
                         $schedules = \App\Models\AmbientSchedule::where('ambient_id', $ambientId)
@@ -98,7 +103,10 @@ class FaceRecognitionController extends Controller
                             $endHour = Carbon::parse($schedule->end_time, 'America/Bogota')->addHours(3);
 
                             if ($now->between($startHour, $endHour)) {
-                                if ($schedule->user_id == $userId) {
+                                $isPermitted = ($schedule->user_id == $userId) || 
+                                               ($schedule->admin_permission == 1 && $schedule->user_allowed == $userId);
+
+                                if ($isPermitted) {
                                     $hasActiveClass = true;
                                     $activeSchedule = $schedule;
                                     

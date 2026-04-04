@@ -534,6 +534,10 @@
                         <option value="13">13</option>
                     </select>
                 </label>
+                <label class="toggle-row" title="Simular que la validación ocurre en otra fecha y hora">
+                    Hora (Simulación):
+                    <input type="datetime-local" id="simulated-time" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:4px 8px;font-family:var(--mono);outline:none; width: 140px;">
+                </label>
             </div>
         </div>
 
@@ -621,6 +625,7 @@
     const cntTotal    = document.getElementById('cnt-total');
     const cntOk       = document.getElementById('cnt-ok');
     const cntDeny     = document.getElementById('cnt-deny');
+    const simulatedTime = document.getElementById('simulated-time');
 
     let stream  = null;
     let lastBlob = null;
@@ -730,6 +735,10 @@
                 const formData = new FormData();
                 formData.append('imagen', lastBlob, 'esp32cam.jpg');
                 formData.append('ambient_id', ambientIdSelect.value);
+                if (simulatedTime.value) {
+                    formData.append('simulated_time', simulatedTime.value);
+                }
+                
                 // El .ino también puede enviar la IP como dato adicional si se configura
                 response = await fetch('{{ route('api.recognize') }}', {
                     method: 'POST',
@@ -740,13 +749,18 @@
             } else {
                 // ── Modo JSON base64 (comportamiento anterior) ──
                 const dataUrl = await blobToDataUrl(lastBlob);
+                let payload = { ip: '127.0.0.1', imagen: dataUrl, ambient_id: ambientIdSelect.value };
+                if (simulatedTime.value) {
+                    payload.simulated_time = simulatedTime.value;
+                }
+                
                 response = await fetch('{{ route('api.recognize') }}', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
                     },
-                    body: JSON.stringify({ ip: '127.0.0.1', imagen: dataUrl, ambient_id: ambientIdSelect.value }),
+                    body: JSON.stringify(payload),
                 });
             }
 

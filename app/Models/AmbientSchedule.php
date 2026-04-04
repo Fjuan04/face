@@ -20,11 +20,15 @@ class AmbientSchedule extends Model
         'date',
         'open_by',
         'closed_by',
-        'break_time'
+        'break_time',
+        'admin_permission',
+        'user_allowed',
+        'granted_by'
     ];
 
     protected $casts = [
         'break_time' => 'boolean',
+        'admin_permission' => 'boolean',
         'date' => 'date',
     ];
 }
