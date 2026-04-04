@@ -49,7 +49,10 @@ Route::prefix('face')->group(function () {
 
     Route::middleware('auth:sanctum')->group(function () {
 
+        //logout
+        Route::post('/logout', [AuthController::class, 'logout']);
 
+        //2fa
         Route::post('/2fa/enable', [AuthController::class, 'enableTwoFactor']);
         Route::post('/2fa/disable', [AuthController::class, 'disableTwoFactor']);
 
