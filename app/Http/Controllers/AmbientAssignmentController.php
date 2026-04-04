@@ -50,19 +50,31 @@ class AmbientAssignmentController extends Controller
                 $amb['clase'] = null;
                 $amb['horario'] = null;
                 $amb['schedule_id'] = null;
+                $amb['extraordinary'] = false;
+                $amb['extraordinary_message'] = null;
 
                 try {
                     $now = \Carbon\Carbon::now('America/Bogota');
                     $currentDate = $now->toDateString();
                     
+                    // 1. Intentar encontrar la clase oficial de HOY en su ventana de ±20 min
                     $activeSchedule = \App\Models\AmbientSchedule::where('ambient_id', $amb['id'])
                         ->where('date', $currentDate)
                         ->get()
                         ->filter(function($schedule) use ($now) {
-                            $start = \Carbon\Carbon::parse($schedule->start_time, 'America/Bogota')->subHours(3);
-                            $end = \Carbon\Carbon::parse($schedule->end_time, 'America/Bogota')->addHours(3);
+                            $start = \Carbon\Carbon::parse($schedule->start_time, 'America/Bogota')->subMinutes(20);
+                            $end = \Carbon\Carbon::parse($schedule->end_time, 'America/Bogota')->addMinutes(20);
                             return $now->between($start, $end);
                         })->first();
+
+                    // 2. FALLBACK (Para Pruebas): Si no hay clase hoy en ventana, buscar 
+                    // cualquier registro que esté ABIERTO (sin importar la fecha)
+                    if (!$activeSchedule) {
+                        $activeSchedule = \App\Models\AmbientSchedule::where('ambient_id', $amb['id'])
+                            ->whereNotNull('open_by')
+                            ->whereNull('closed_by')
+                            ->first();
+                    }
 
                     if ($activeSchedule) {
                         $amb['schedule_id'] = $activeSchedule->id;
@@ -79,6 +91,12 @@ class AmbientAssignmentController extends Controller
                         $amb['clase'] = $clase;
                         $amb['horario'] = $horario;
                         $amb['full_status'] = "Docente: {$docente} | Ficha: {$ficha} | Clase: {$clase} | Horario: {$horario}";
+
+                        // Validación de asignación extraordinaria
+                        if (!is_null($activeSchedule->open_by) && $activeSchedule->open_by != $activeSchedule->user_id) {
+                            $amb['extraordinary'] = true;
+                            $amb['extraordinary_message'] = "La asignación de este ambiente fue cambiada extraordinariamente";
+                        }
                     }
                 } catch (\Exception $e) {
                     // Silently fail or log error
