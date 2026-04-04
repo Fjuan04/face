@@ -529,15 +529,16 @@
                 <label class="toggle-row" title="Selecciona el ID del ambiente">
                     Ambient ID: 
                     <select id="ambient-id-select" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:4px 8px;font-family:var(--mono);outline:none;">
+                        <option value="10">10</option>
                         <option value="11">11</option>
                         <option value="12">12</option>
                         <option value="13">13</option>
                     </select>
                 </label>
-                <label class="toggle-row" title="Simular que la validación ocurre en otra fecha y hora">
+                <div style="display: flex; flex-direction: column; gap: 4px; font-family: var(--mono); font-size: 0.72rem; color: var(--text-dim);" title="Simular que la validación ocurre en otra fecha y hora">
                     Hora (Simulación):
-                    <input type="datetime-local" id="simulated-time" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:4px 8px;font-family:var(--mono);outline:none; width: 140px;">
-                </label>
+                    <input type="datetime-local" id="simulated-time" style="background:var(--bg2);color:var(--text);border:1px solid var(--border);padding:4px 8px;font-family:var(--mono);outline:none; width: 100%; cursor: text;">
+                </div>
             </div>
         </div>
 

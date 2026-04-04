@@ -11,5 +11,7 @@ class Event extends Model
         'device_id',
         'ambient_id',
         'event_type',
+        'created_at',
+        'updated_at',
     ];
 }

@@ -109,12 +109,39 @@ class ScheduleController extends Controller
             ], 403);
         }
 
-        // Buscamos los eventos relacionados
-        $events = Event::where('user_id', $schedule->user_id)
-            ->where('ambient_id', $schedule->ambient_id)
-            ->whereDate('created_at', $schedule->date)
-            ->orderBy('created_at', 'asc')
-            ->get();
+        // === Buscamos los eventos relacionados (máximo 1 entry + 1 exit por sesión) ===
+        $logs = [];
+
+        if ($schedule->open_by) {
+            // Ventana de apertura: ±20 min alrededor del horario de la clase
+            $startWindow = Carbon::parse($schedule->date->toDateString() . ' ' . $schedule->start_time)->subMinutes(20);
+            $endWindow   = Carbon::parse($schedule->date->toDateString() . ' ' . $schedule->end_time)->addMinutes(20);
+
+            $entryEvent = Event::where('ambient_id', $schedule->ambient_id)
+                ->where('user_id', $schedule->open_by)
+                ->whereBetween('created_at', [$startWindow, $endWindow])
+                ->where('event_type', 'entry')
+                ->orderBy('created_at', 'asc')
+                ->first();
+
+            if ($entryEvent) {
+                $logs[] = $entryEvent;
+
+                // El cierre: primer exit DESPUÉS de esta entrada específica
+                if ($schedule->closed_by) {
+                    $exitEvent = Event::where('ambient_id', $schedule->ambient_id)
+                        ->where('user_id', $schedule->closed_by)
+                        ->where('created_at', '>', $entryEvent->created_at)
+                        ->where('event_type', 'exit')
+                        ->orderBy('created_at', 'asc')
+                        ->first();
+
+                    if ($exitEvent) {
+                        $logs[] = $exitEvent;
+                    }
+                }
+            }
+        }
 
         return response()->json([
             'success' => true,
@@ -125,7 +152,7 @@ class ScheduleController extends Controller
                     'is_closed' => !is_null($schedule->closed_by),
                     'in_break' => ($schedule->break_time == 1 && is_null($schedule->end_break)),
                 ],
-                'logs' => $events
+                'logs' => $logs
             ]
         ]);
     }

@@ -97,102 +97,150 @@ class FaceRecognitionController extends Controller
                         $hasActiveClass = false;
                         $activeScheduleDetails = null;
                         $activeSchedule = null;
-
-                        foreach ($schedules as $schedule) {
-                            $startHour = Carbon::parse($schedule->start_time, 'America/Bogota')->subHours(3);
-                            $endHour = Carbon::parse($schedule->end_time, 'America/Bogota')->addHours(3);
-
-                            if ($now->between($startHour, $endHour)) {
-                                $isPermitted = ($schedule->user_id == $userId) || 
-                                               ($schedule->admin_permission == 1 && $schedule->user_allowed == $userId);
-
-                                if ($isPermitted) {
-                                    $hasActiveClass = true;
-                                    $activeSchedule = $schedule;
-                                    
-                                    $horarioStr = Carbon::parse($schedule->start_time)->format('H:i') . ' - ' . Carbon::parse($schedule->end_time)->format('H:i');
-                                    $docente = $userName ?? 'Docente';
-                                    $ficha = $schedule->codeTab ?? 'Ficha';
-                                    $clase = $schedule->class ?? 'Clase';
-                                    
-                                    $activeScheduleDetails = [
-                                        'ambient' => "Ambiente {$ambientId}",
-                                        'status' => 'Ocupado',
-                                        'docente' => $docente,
-                                        'ficha' => $ficha,
-                                        'clase' => $clase,
-                                        'horario' => $horarioStr,
-                                        'full_message' => "Ambiente {$ambientId} Ocupado | Docente: {$docente} | Ficha: {$ficha} | Clase: {$clase} | Horario: {$horarioStr}"
-                                    ];
-                                    break;
-                                }
-                            }
-                        }
-
-                        if (!$hasActiveClass) {
-                            return response()->json([
-                                'success' => false,
-                                'code' => 'NO_CLASS',
-                                'message' => "Acceso denegado: El docente no tiene clase programada en este ambiente a esta hora.",
-                                'data' => [
-                                    'id' => $userId,
-                                    'nombre' => $userName,
-                                    'distancia' => $decoded['distancia'] ?? null,
-                                    'tipo_evento' => null,
-                                    'hasClass' => false,
-                                    'ambient_name' => "Ambiente {$ambientId}"
-                                ]
-                            ], 403);
-                        }
-
-                        // === LOGICA DE ENTRADA, DESCANSO Y SALIDA (Reemplazando a Python) ===
                         $tipoEvento = 'entry';
                         $isOccupied = true;
 
-                        if (is_null($activeSchedule->open_by)) {
-                            // 1. ENTRADA INICIAL
-                            $activeSchedule->open_by = $userId;
-                            $activeSchedule->save();
+                        // Helper: verificar si el usuario tiene permiso para un schedule
+                        $isPermittedFn = function($schedule) use ($userId) {
+                            return ($schedule->user_id == $userId) ||
+                                   ($schedule->admin_permission == 1 && $schedule->user_allowed == $userId);
+                        };
 
-                            \App\Models\Event::create([
-                                'user_id' => $userId,
-                                'device_id' => 1,
-                                'ambient_id' => $ambientId,
-                                'event_type' => 'entry',
-                            ]);
+                        // Helper: construir detalles de la clase activa
+                        $buildDetails = function($schedule) use ($ambientId, $userName) {
+                            $horarioStr = Carbon::parse($schedule->start_time)->format('H:i') . ' - ' . Carbon::parse($schedule->end_time)->format('H:i');
+                            $docente = $userName ?? 'Docente';
+                            $ficha   = $schedule->codeTab ?? 'Ficha';
+                            $clase   = $schedule->class   ?? 'Clase';
+                            return [
+                                'ambient'      => "Ambiente {$ambientId}",
+                                'status'       => 'Ocupado',
+                                'docente'      => $docente,
+                                'ficha'        => $ficha,
+                                'clase'        => $clase,
+                                'horario'      => $horarioStr,
+                                'full_message' => "Ambiente {$ambientId} Ocupado | Docente: {$docente} | Ficha: {$ficha} | Clase: {$clase} | Horario: {$horarioStr}",
+                            ];
+                        };
 
-                            $tipoEvento = 'entry';
-                            $isOccupied = true;
+                        // === PASO 1: ¿Hay alguna clase abierta (sin cerrar) para este usuario? ===
+                        $openSession = null;
+                        foreach ($schedules as $schedule) {
+                            if ($isPermittedFn($schedule) && !is_null($schedule->open_by) && is_null($schedule->closed_by)) {
+                                $openSession = $schedule;
+                                break;
+                            }
+                        }
 
-                        } elseif (!is_null($activeSchedule->open_by) && is_null($activeSchedule->closed_by)) {
-                            // 2. RETORNO DE DESCANSO O SALIDA
-                            if ($activeSchedule->break_time == 1 && is_null($activeSchedule->end_break)) {
-                                // Viene de descanso
-                                $activeSchedule->end_break = now();
-                                $activeSchedule->save();
-                                
-                                $tipoEvento = 'entry'; // ESP32 abre puerta
+                        if ($openSession) {
+                            $hasActiveClass = true;
+                            $activeSchedule = $openSession;
+                            $activeScheduleDetails = $buildDetails($openSession);
+
+                            if ($openSession->break_time == 1 && is_null($openSession->end_break)) {
+                                // === Retorno de descanso ===
+                                $openSession->end_break = $now;
+                                $openSession->updated_at = $now;
+                                $openSession->save();
+                                $tipoEvento = 'entry';
                                 $isOccupied = true;
-                                // NO insertamos en la tabla events
                             } else {
-                                // 3. SALIDA DEFINITIVA
-                                $activeSchedule->closed_by = $userId;
-                                $activeSchedule->save();
+                                // === Cierre de sesión abierta ===
+                                $openSession->closed_by = $userId;
+                                $openSession->updated_at = $now;
+                                $openSession->save();
 
                                 \App\Models\Event::create([
-                                    'user_id' => $userId,
-                                    'device_id' => 1,
+                                    'user_id'    => $userId,
+                                    'device_id'  => 1,
                                     'ambient_id' => $ambientId,
                                     'event_type' => 'exit',
+                                    'created_at' => $now,
+                                    'updated_at' => $now,
                                 ]);
 
                                 $tipoEvento = 'exit';
                                 $isOccupied = false;
+
+                                // === Verificar si hay una nueva clase en la ventana de tiempo ===
+                                foreach ($schedules as $schedule) {
+                                    if ($schedule->id === $openSession->id) continue;
+
+                                    $dateOnly  = Carbon::parse($schedule->date)->toDateString();
+                                    $startHour = Carbon::parse($dateOnly . ' ' . $schedule->start_time, 'America/Bogota')->subMinutes(20);
+                                    $endHour   = Carbon::parse($dateOnly . ' ' . $schedule->end_time,   'America/Bogota')->addMinutes(20);
+
+                                    if ($isPermittedFn($schedule) && $now->between($startHour, $endHour)) {
+                                        // Abrir nueva sesión automáticamente
+                                        $schedule->open_by = $userId;
+                                        $schedule->updated_at = $now;
+                                        $schedule->save();
+
+                                        \App\Models\Event::create([
+                                            'user_id'    => $userId,
+                                            'device_id'  => 1,
+                                            'ambient_id' => $ambientId,
+                                            'event_type' => 'entry',
+                                            'created_at' => $now,
+                                            'updated_at' => $now,
+                                        ]);
+
+                                        $tipoEvento = 'entry';
+                                        $isOccupied = true;
+                                        $activeSchedule = $schedule;
+                                        $activeScheduleDetails = $buildDetails($schedule);
+                                        break;
+                                    }
+                                }
                             }
+
                         } else {
-                            // Ya estaba cerrado, lo marcamos como salida por defecto
-                            $tipoEvento = 'exit';
-                            $isOccupied = false;
+                            // === PASO 2: Sin sesión abierta — buscar clase en ventana de tiempo ===
+                            foreach ($schedules as $schedule) {
+                                $dateOnly  = Carbon::parse($schedule->date)->toDateString();
+                                $startHour = Carbon::parse($dateOnly . ' ' . $schedule->start_time, 'America/Bogota')->subMinutes(20);
+                                $endHour   = Carbon::parse($dateOnly . ' ' . $schedule->end_time,   'America/Bogota')->addMinutes(20);
+
+                                if ($now->between($startHour, $endHour) && $isPermittedFn($schedule)) {
+                                    $hasActiveClass = true;
+                                    $activeSchedule = $schedule;
+                                    $activeScheduleDetails = $buildDetails($schedule);
+                                    break;
+                                }
+                            }
+
+                            if (!$hasActiveClass) {
+                                return response()->json([
+                                    'success' => false,
+                                    'code'    => 'NO_CLASS',
+                                    'message' => "Acceso denegado: El docente no tiene clase programada en este ambiente a esta hora.",
+                                    'data'    => [
+                                        'id'          => $userId,
+                                        'nombre'      => $userName,
+                                        'distancia'   => $decoded['distancia'] ?? null,
+                                        'tipo_evento' => null,
+                                        'hasClass'    => false,
+                                        'ambient_name' => "Ambiente {$ambientId}",
+                                    ]
+                                ], 403);
+                            }
+
+                            // Solo puede ser entrada nueva (open_by == null en esta rama)
+                            $activeSchedule->open_by = $userId;
+                            $activeSchedule->updated_at = $now;
+                            $activeSchedule->save();
+
+                            \App\Models\Event::create([
+                                'user_id'    => $userId,
+                                'device_id'  => 1,
+                                'ambient_id' => $ambientId,
+                                'event_type' => 'entry',
+                                'created_at' => $now,
+                                'updated_at' => $now,
+                            ]);
+
+                            $tipoEvento = 'entry';
+                            $isOccupied = true;
                         }
 
                         $decoded['tipo_evento'] = $tipoEvento;

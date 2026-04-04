@@ -96,28 +96,34 @@ class SchedulesExport implements FromQuery, WithHeadings, WithMapping
         $horaCierre = 'No cerrado';
 
         if ($row->open_by) {
+            // Ventana de apertura: desde 20 min antes del inicio de la clase hasta 20 min después del fin
+            $startWindow = \Carbon\Carbon::parse($row->date . ' ' . $row->start_time)->subMinutes(20);
+            $endWindow   = \Carbon\Carbon::parse($row->date . ' ' . $row->end_time)->addMinutes(20);
+
             $entryEvent = \App\Models\Event::where('ambient_id', $row->ambient_id)
                 ->where('user_id', $row->open_by)
-                ->whereDate('created_at', $row->date)
+                ->whereBetween('created_at', [$startWindow, $endWindow])
                 ->where('event_type', 'entry')
                 ->orderBy('created_at', 'asc')
                 ->first();
                 
             if ($entryEvent) {
                 $horaApertura = $entryEvent->created_at->format('H:i:s');
-            }
-        }
-        
-        if ($row->closed_by) {
-            $exitEvent = \App\Models\Event::where('ambient_id', $row->ambient_id)
-                ->where('user_id', $row->closed_by)
-                ->whereDate('created_at', $row->date)
-                ->where('event_type', 'exit')
-                ->orderBy('created_at', 'desc')
-                ->first();
-                
-            if ($exitEvent) {
-                $horaCierre = $exitEvent->created_at->format('H:i:s');
+
+                // El cierre se busca como el PRIMER exit que ocurra DESPUÉS de esta entrada específica
+                // Así cada clase encuentra su propio cierre independientemente del horario
+                if ($row->closed_by) {
+                    $exitEvent = \App\Models\Event::where('ambient_id', $row->ambient_id)
+                        ->where('user_id', $row->closed_by)
+                        ->where('created_at', '>', $entryEvent->created_at)
+                        ->where('event_type', 'exit')
+                        ->orderBy('created_at', 'asc')
+                        ->first();
+                        
+                    if ($exitEvent) {
+                        $horaCierre = $exitEvent->created_at->format('H:i:s');
+                    }
+                }
             }
         }
 
