@@ -47,7 +47,7 @@ Route::prefix('face')->group(function () {
 
     //rutas protegidas
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'password.change'])->group(function () {
 
         //logout
         Route::post('/logout', [AuthController::class, 'logout']);
@@ -84,7 +84,26 @@ Route::prefix('face')->group(function () {
             });
 
             
-        //validar usuario
+        // Rutas de Gestión de Asistencia y Grupos (Nuevas)
+        Route::prefix('management')->group(function () {
+            // Rutas de Administrador
+            Route::middleware('admin')->group(function () {
+                Route::get('/groups', [\App\Http\Controllers\AttendanceManagementController::class, 'index']);
+                Route::get('/teachers', [\App\Http\Controllers\AttendanceManagementController::class, 'teachers']);
+                Route::post('/import-students', [\App\Http\Controllers\AttendanceManagementController::class, 'importStudents']);
+                Route::post('/assign-teacher', [\App\Http\Controllers\AttendanceManagementController::class, 'assignTeacherToGroups']);
+            });
+
+            // Rutas de Docente
+            Route::get('/teacher/groups', [\App\Http\Controllers\AttendanceManagementController::class, 'getTeacherGroups']);
+            Route::get('/teacher/groups/{groupId}/students', [\App\Http\Controllers\AttendanceManagementController::class, 'getGroupStudents']);
+            Route::post('/teacher/students/{studentId}/photo', [\App\Http\Controllers\AttendanceManagementController::class, 'uploadStudentPhoto']);
+        });
+
+        // Cambio de contraseña obligatorio
+        Route::post('/change-password', [AuthController::class, 'changePassword']);
+
+        // Validar usuario
         Route::get('/user', function (Request $request) {
             return $request->user();
         });

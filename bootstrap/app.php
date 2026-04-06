@@ -19,9 +19,9 @@ return Application::configure(basePath: dirname(__DIR__))
         //
         $middleware->alias([
             'admin' => AdminMiddleware::class,
-            'docent' => DocentMiddleware::class
-            
-            ]);
+            'docent' => DocentMiddleware::class,
+            'password.change' => \App\Http\Middleware\EnsurePasswordIsChanged::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (AuthenticationException $e, Request $request) {

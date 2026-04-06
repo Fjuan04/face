@@ -33,13 +33,15 @@ class AuthController extends Controller
 
             return response()->json([
                 'two_factor' => true,
-                'tmp_token'  => $tmpToken
+                'tmp_token'  => $tmpToken,
+                'must_change_password' => $user->must_change_password,
             ]);
         }
 
         return response()->json([
             'token' => $user->createToken('spa-token')->plainTextToken,
             'user'  => $user,
+            'must_change_password' => $user->must_change_password,
         ]);
     }
 
@@ -153,6 +155,23 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Sesión cerrada']);
+    }
+
+    public function changePassword(Request $request)
+    {
+        $request->validate([
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $user = $request->user();
+        $user->password = $request->password;
+        $user->must_change_password = false;
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Contraseña actualizada correctamente.'
+        ]);
     }
 
     public function me(Request $request)

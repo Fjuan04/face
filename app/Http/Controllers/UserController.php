@@ -73,9 +73,10 @@ class UserController extends Controller
             'fullname' => $validated['fullname'],
             'email' => $validated['email'],
             'password' => $validated['password'],
-            'role_id' => 2,
+            'role_id' => $validated['role_id'] ?? 2,
             'is_active' => true,
             'photo' => $photoPath,
+            'must_change_password' => true,
         ]);
 
         // Respuesta JSON para consumo desde frontend

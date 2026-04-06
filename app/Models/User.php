@@ -17,7 +17,7 @@ class User extends Authenticatable
      *
      * @var bool
      */
-    public $incrementing = false;
+    public $incrementing = true;
 
     /**
      * The "type" of the primary key ID.
@@ -41,6 +41,7 @@ class User extends Authenticatable
         'role_id',
         'is_active',
         'photo',
+        'must_change_password',
     ];
 
     /**
@@ -63,6 +64,15 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'must_change_password' => 'boolean',
         ];
+    }
+
+    /**
+     * The groups that the user belongs to.
+     */
+    public function groups(): \Illuminate\Database\Eloquent\Relations\BelongsToMany
+    {
+        return $this->belongsToMany(Group::class);
     }
 }
