@@ -92,12 +92,20 @@ Route::prefix('face')->group(function () {
                 Route::get('/teachers', [\App\Http\Controllers\AttendanceManagementController::class, 'teachers']);
                 Route::post('/import-students', [\App\Http\Controllers\AttendanceManagementController::class, 'importStudents']);
                 Route::post('/assign-teacher', [\App\Http\Controllers\AttendanceManagementController::class, 'assignTeacherToGroups']);
+                
+                // Nuevas rutas de reporte de asistencia (Admin)
+                Route::get('/attendance/report', [\App\Http\Controllers\AttendanceReportController::class, 'report']);
+                Route::get('/attendance/export', [\App\Http\Controllers\AttendanceReportController::class, 'export']);
             });
 
             // Rutas de Docente
             Route::get('/teacher/groups', [\App\Http\Controllers\AttendanceManagementController::class, 'getTeacherGroups']);
             Route::get('/teacher/groups/{groupId}/students', [\App\Http\Controllers\AttendanceManagementController::class, 'getGroupStudents']);
             Route::post('/teacher/students/{studentId}/photo', [\App\Http\Controllers\AttendanceManagementController::class, 'uploadStudentPhoto']);
+            
+            // Nuevas rutas de reporte de asistencia (Docente - opcionalmente puede ver sus grupos)
+            Route::get('/teacher/attendance/report', [\App\Http\Controllers\AttendanceReportController::class, 'report']);
+            Route::get('/teacher/attendance/export', [\App\Http\Controllers\AttendanceReportController::class, 'export']);
         });
 
         // Cambio de contraseña obligatorio
