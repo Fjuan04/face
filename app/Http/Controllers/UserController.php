@@ -13,7 +13,7 @@ class UserController extends Controller
      */
     public function index()
     {
-        $users = User::all();
+        $users = User::paginate(5);
         
         return response()->json([
             'success' => true,
@@ -119,7 +119,20 @@ class UserController extends Controller
      */
     public function destroy(string $id)
     {
-        //
+        $user = User::find($id);
+
+        if (!$user) {
+            return response()->json(['message' => 'Usuario no encontrado'], 404);
+        }
+
+        // Eliminar la foto física del almacenamiento
+        if ($user->photo) {
+            Storage::delete($user->photo);
+        }
+
+        $user->delete();
+
+        return response()->json(['message' => 'Usuario eliminado correctamente'], 200);
     }
 
     public function search(Request $request)
@@ -137,10 +150,40 @@ class UserController extends Controller
 
         //busqueda del docente por documento y reindexacion de la respuesta
         $docente = array_values(array_filter($docentes['data'],fn($u)=>$u['document'] == $documento ));
+        
         if(count($docente) < 1){
             return response()->json(['message' => 'No se encontraron docentes con este número de identidad'],404);
         }
 
         return response()->json($docente[0], 200);
+    }
+
+    public function updatePhoto(Request $request, string $id)
+    {
+        $request->validate([
+            'photo' => ['required', 'image', 'mimes:jpeg,jpg,png', 'max:4096'], // 4MB
+        ]);
+
+        $user = User::find($id);
+
+        if (!$user) {
+            return response()->json(['message' => 'Usuario no encontrado'], 404);
+        }
+
+        // Eliminar la foto anterior si existe
+        if ($user->photo) {
+            Storage::delete($user->photo);
+        }
+
+        // Guardar la nueva foto
+        $photoPath = $request->file('photo')->store('faces');
+        
+        $user->photo = $photoPath;
+        $user->save();
+
+        return response()->json([
+            'message' => 'Foto actualizada correctamente',
+            'user' => $user,
+        ], 200);
     }
 }

@@ -81,7 +81,15 @@ Route::prefix('face')->group(function () {
             // listar usuarios del sistema
             Route::get('/users', [UserController::class, 'index'])
                 ->name('users.index');
-            });
+
+            // eliminar usuario
+            Route::delete('/users/{id}', [UserController::class, 'destroy'])
+                ->name('users.destroy');
+
+            // actualizar foto
+            Route::post('/users/{id}/photo', [UserController::class, 'updatePhoto'])
+                ->name('users.photo');
+        });
 
             
         // Rutas de Gestión de Asistencia y Grupos (Nuevas)
@@ -94,11 +102,13 @@ Route::prefix('face')->group(function () {
                 Route::post('/assign-teacher', [\App\Http\Controllers\AttendanceManagementController::class, 'assignTeacherToGroups']);
                 
                 // Nuevas rutas de reporte de asistencia (Admin)
-                Route::get('/attendance/report', [\App\Http\Controllers\AttendanceReportController::class, 'report']);
-                Route::get('/attendance/export', [\App\Http\Controllers\AttendanceReportController::class, 'export']);
             });
-
+            
             // Rutas de Docente
+            // asistencias
+            Route::get('/attendance/report', [\App\Http\Controllers\AttendanceReportController::class, 'report']);
+            Route::get('/attendance/export', [\App\Http\Controllers\AttendanceReportController::class, 'export']);
+            
             Route::get('/teacher/groups', [\App\Http\Controllers\AttendanceManagementController::class, 'getTeacherGroups']);
             Route::get('/teacher/groups/{groupId}/students', [\App\Http\Controllers\AttendanceManagementController::class, 'getGroupStudents']);
             Route::post('/teacher/students/{studentId}/photo', [\App\Http\Controllers\AttendanceManagementController::class, 'uploadStudentPhoto']);
