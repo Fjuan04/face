@@ -120,5 +120,6 @@ Route::prefix('face')->group(function () {
         Route::get('/schedules/export', [ScheduleController::class, 'export']);
         Route::get('/schedules', [ScheduleController::class, 'index']);
         Route::get('/schedules/{id}', [ScheduleController::class, 'show']);
+        Route::post('/ambients/{ambientId}/break', [ScheduleController::class, 'startBreak']);
     });
 });

@@ -21,6 +21,7 @@ class AmbientSchedule extends Model
         'open_by',
         'closed_by',
         'break_time',
+        'start_break',
         'end_break',
         'admin_permission',
         'user_allowed',

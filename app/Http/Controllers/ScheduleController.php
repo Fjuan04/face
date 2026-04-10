@@ -212,4 +212,54 @@ class ScheduleController extends Controller
             'data' => $schedule
         ]);
     }
+
+    /**
+     * Marca el inicio del descanso para un docente en su clase activa
+     * 
+     * POST /api/face/ambients/{ambientId}/break
+     */
+    public function startBreak(Request $request, $ambientId)
+    {
+        $user = auth()->user();
+        $now = Carbon::now('America/Bogota');
+        $today = $now->toDateString();
+
+        // Buscamos el horario activo para este docente en este ambiente
+        $schedule = AmbientSchedule::where('ambient_id', $ambientId)
+            ->where('user_id', $user->id)
+            ->whereDate('date', $today)
+            ->whereNotNull('open_by')
+            ->whereNull('closed_by')
+            ->first();
+
+        if (!$schedule) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No tienes una clase activa en este ambiente para marcar descanso.'
+            ], 404);
+        }
+
+        // Validación: Solo un descanso por sesión
+        if ($schedule->break_time) {
+            return response()->json([
+                'success' => false,
+                'message' => 'El descanso ya fue marcado'
+            ], 400);
+        }
+
+        // Marcar inicio del descanso
+        $schedule->break_time = true;
+        $schedule->start_break = $now;
+        $schedule->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Descanso marcado correctamente',
+            'data' => [
+                'schedule_id' => $schedule->id,
+                'ambient_id'  => $schedule->ambient_id,
+                'start_break' => $schedule->start_break->toDateTimeString(),
+            ]
+        ]);
+    }
 }

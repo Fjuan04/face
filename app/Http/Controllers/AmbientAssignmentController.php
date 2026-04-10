@@ -52,6 +52,7 @@ class AmbientAssignmentController extends Controller
                 $amb['schedule_id'] = null;
                 $amb['extraordinary'] = false;
                 $amb['extraordinary_message'] = null;
+                $amb['break_time'] = false;
 
                 try {
                     $now = \Carbon\Carbon::now('America/Bogota');
@@ -97,6 +98,8 @@ class AmbientAssignmentController extends Controller
                             $amb['extraordinary'] = true;
                             $amb['extraordinary_message'] = "La asignación de este ambiente fue cambiada extraordinariamente";
                         }
+
+                        $amb['break_time'] = $activeSchedule->break_time;
                     }
                 } catch (\Exception $e) {
                     // Silently fail or log error
