@@ -23,7 +23,7 @@ class AmbientAssignmentController extends Controller
 
         if ($res->successful()) {
             // dispositivos asignados
-            $devices = Device::pluck('ambient_id');
+            $devices = \App\Models\Device::pluck('ambient_id');
 
             // filtramos solo los ambientes que están asignados a un dispositivo
             $ambientes_asignados = collect($res->json('data'))
@@ -35,9 +35,15 @@ class AmbientAssignmentController extends Controller
 
             $now = \Carbon\Carbon::now('America/Bogota');
             $currentDay = $now->dayOfWeekIso;
+            $currentDate = $now->toDateString();
+
+            // Variables para estadísticas globales
+            $totalTentative = 0;
+            $totalPresent = 0;
+            $activeSchedules = collect();
 
             // Mapeo iterando cada ambiente para cruzarle "x" e "y" y detalles de ocupación
-            $data = $ambientes_asignados->map(function ($amb) use ($settings, $baseUrl, $apiKey, $now, $currentDay) {
+            $data = $ambientes_asignados->map(function ($amb) use ($settings, $baseUrl, $apiKey, $now, $currentDay, $currentDate, &$activeSchedules) {
                 $setting = $settings->firstWhere('ambient_id',  $amb['id']);
 
                 if ($setting) {
@@ -56,9 +62,6 @@ class AmbientAssignmentController extends Controller
                 $amb['break_time'] = false;
 
                 try {
-                    $now = \Carbon\Carbon::now('America/Bogota');
-                    $currentDate = $now->toDateString();
-                    
                     // 1. Intentar encontrar la clase oficial de HOY en su ventana de ±20 min
                     $activeSchedule = \App\Models\AmbientSchedule::where('ambient_id', $amb['id'])
                         ->where('date', $currentDate)
@@ -79,6 +82,8 @@ class AmbientAssignmentController extends Controller
                     }
 
                     if ($activeSchedule) {
+                        $activeSchedules->push($activeSchedule);
+                        
                         $amb['schedule_id'] = $activeSchedule->id;
                         $docente = $activeSchedule->teacher_name ?? 'No asignado';
                         $ficha = $activeSchedule->codeTab ?? 'Sin ficha';
@@ -103,7 +108,6 @@ class AmbientAssignmentController extends Controller
                         $amb['break_time'] = $activeSchedule->break_time;
                     }
                 } catch (\Exception $e) {
-                    // Silently fail or log error
                     $amb['status_text'] = "Error logico local";
                 }
 
@@ -126,7 +130,51 @@ class AmbientAssignmentController extends Controller
                 return $a['id'] <=> $b['id'];
             });
 
-            return response()->json($data);
+            // 1. Identificar todos los ambientes registrados
+            $ambientIds = $devices->toArray();
+            
+            // 2. Buscar TODAS las clases que están estrictamente "en curso" en este momento
+            // Usamos el tiempo actual sin el margen de 20 minutos para que las estadísticas sean precisas
+            $currentTime = $now->toTimeString();
+            $strictlyActiveSchedules = \App\Models\AmbientSchedule::whereIn('ambient_id', $ambientIds)
+                ->where('date', $currentDate)
+                ->where('start_time', '<=', $currentTime)
+                ->where('end_time', '>=', $currentTime)
+                ->get();
+
+            if ($strictlyActiveSchedules->isNotEmpty()) {
+                $activeScheduleIds = $strictlyActiveSchedules->pluck('id');
+                $activeFichas = $strictlyActiveSchedules->pluck('codeTab')->filter()->unique();
+
+                // TENTATIVE: Suma de integrantes esperados en los grupos de las clases en curso
+                $totalTentative = \App\Models\Group::whereIn('code_tab', $activeFichas)
+                    ->withCount('users')
+                    ->get()
+                    ->sum('users_count');
+
+                // PRESENT: Estudiantes presentes + Docentes con sesión abierta
+                $presentStudents = \App\Models\Attendance::whereIn('ambient_schedule_id', $activeScheduleIds)
+                    ->whereIn('id', function($query) use ($activeScheduleIds) {
+                        $query->selectRaw('MAX(id)')
+                            ->from('attendances')
+                            ->whereIn('ambient_schedule_id', $activeScheduleIds)
+                            ->groupBy('user_id', 'ambient_schedule_id');
+                    })
+                    ->where('event_type', 'entry')
+                    ->count();
+                
+                $presentTeachers = $strictlyActiveSchedules->filter(fn($s) => !is_null($s->open_by) && is_null($s->closed_by))->count();
+
+                $totalPresent = $presentStudents + $presentTeachers;
+            }
+
+            return response()->json([
+                'stats' => [
+                    'tentative' => (int) $totalTentative,
+                    'present'   => (int) $totalPresent,
+                ],
+                'ambients' => $data
+            ]);
         }
 
         return response()->json(['message' => 'No se encontraron ambientes'], 404);
