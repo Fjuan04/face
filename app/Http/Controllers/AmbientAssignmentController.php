@@ -11,6 +11,7 @@ class AmbientAssignmentController extends Controller
 {
 
 
+
     public function ambients()
     {
         $baseUrl = config('app.api.url');
@@ -131,4 +132,72 @@ class AmbientAssignmentController extends Controller
         return response()->json(['message' => 'No se encontraron ambientes'], 404);
     }
 
+    /**
+     * Obtiene los ambientes desde CRONODE que aún no están asignados localmente.
+     */
+    public function cronodeAmbients()
+    {
+        $baseUrl = config('app.api.url');
+        $apiKey = config('app.api.key');
+
+        $res = Http::withHeaders([
+            'x-api-key' => $apiKey
+        ])->get($baseUrl . 'api/v1/ambients');
+
+        if ($res->successful()) {
+            $cronodeAmbients = collect($res->json('data'));
+            
+            // Obtener IDs de ambientes ya registrados localmente
+            $localAmbientIds = Device::pluck('ambient_id');
+
+            // Filtrar para dejar solo los que NO están registrados
+            $availableAmbients = $cronodeAmbients->filter(function($amb) use ($localAmbientIds) {
+                return !$localAmbientIds->contains($amb['id']);
+            })->values();
+
+            return response()->json($availableAmbients);
+        }
+
+        return response()->json(['message' => 'No se pudo conectar con CRONODE'], 500);
+    }
+
+    /**
+     * Registra un nuevo ambiente localmente (crea un Device).
+     */
+    public function storeDevice(Request $request)
+    {
+        $validated = $request->validate([
+            'ambient_id' => 'required|integer|unique:devices,ambient_id',
+            'name'       => 'required|string|max:255',
+            'ip_address' => 'required|ip',
+        ]);
+
+        $device = Device::create([
+            'ambient_id' => $validated['ambient_id'],
+            'name'       => $validated['name'],
+            'ip_address' => $validated['ip_address'],
+            'status'     => 1,
+        ]);
+
+        return response()->json([
+            'message' => 'Ambiente registrado correctamente',
+            'data'    => $device
+        ], 201);
+    }
+
+    /**
+     * Elimina el registro local de un ambiente (borra el Device).
+     */
+    public function destroyDevice($ambientId)
+    {
+        $device = Device::where('ambient_id', $ambientId)->first();
+
+        if (!$device) {
+            return response()->json(['message' => 'Ambiente no encontrado'], 404);
+        }
+
+        $device->delete();
+
+        return response()->json(['message' => 'Ambiente eliminado correctamente']);
+    }
 }

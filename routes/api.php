@@ -43,6 +43,7 @@ Route::prefix('face')->group(function () {
     //ambientes
     //ambientes
     Route::get('/ambients', [AmbientAssignmentController::class, 'ambients']);
+    Route::get('/ambients/cronode', [AmbientAssignmentController::class, 'cronodeAmbients']);
 
 
     //rutas protegidas
@@ -89,6 +90,10 @@ Route::prefix('face')->group(function () {
             // actualizar foto
             Route::post('/users/{id}/photo', [UserController::class, 'updatePhoto'])
                 ->name('users.photo');
+
+            // Gestión de ambientes
+            Route::post('/ambients', [AmbientAssignmentController::class, 'storeDevice']);
+            Route::delete('/ambients/{ambientId}', [AmbientAssignmentController::class, 'destroyDevice']);
         });
 
             
