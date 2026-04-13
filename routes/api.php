@@ -9,7 +9,7 @@ use App\Http\Controllers\ScheduleController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Http;
-
+use App\Http\Controllers\ChatController;
 
 Route::post('recognize', [FaceRecognitionController::class, 'process'])
     ->middleware('throttle:20,1')
@@ -49,6 +49,9 @@ Route::prefix('face')->group(function () {
     //rutas protegidas
 
     Route::middleware(['auth:sanctum', 'password.change'])->group(function () {
+
+        //chatbot
+        Route::post('/chatbot/chat', [ChatController::class, 'chat']);
 
         //logout
         Route::post('/logout', [AuthController::class, 'logout']);
