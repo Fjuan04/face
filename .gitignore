@@ -30,6 +30,9 @@ env/
 __pycache__/
 *.pyc
 
+# Modelos Dlib (binarios grandes; no subir a GitHub — ver app/Services/face-recognition/models/README.txt)
+app/Services/face-recognition/models/*.dat
+
 
 
 tmpclaude-*-cwd
