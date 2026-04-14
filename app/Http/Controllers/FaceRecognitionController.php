@@ -40,10 +40,14 @@ class FaceRecognitionController extends Controller
                 $path = $photo->store('tmp');
                 $fullPath = Storage::path($path);
 
-                // detectar OS y construir comando para shell_exec
-                $python = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN'
-                    ? app_path('Services/face-recognition/venv/Scripts/python.exe')
-                    : app_path('Services/face-recognition/venv/bin/python');
+                // Python: en docker usamos python3 del sistema
+                $pythonFromEnv = env('PYTHON_BIN');
+                if (!empty($pythonFromEnv)) {
+                    $python = $pythonFromEnv;
+                } else {
+                    // Fallback directo a 'python3' en el contenedor o OS host
+                    $python = 'python3';
+                }
 
                 $script = app_path('Services/face-recognition/src/reconocer.py');
 
@@ -51,6 +55,8 @@ class FaceRecognitionController extends Controller
 
                 // Capturamos también stderr
                 $output = shell_exec($command . ' 2>&1');
+
+                \Illuminate\Support\Facades\Log::info("PYTHON_RAW_OUTPUT: " . $output);
 
                 if ($output === null) {
                     return response()->json([
@@ -61,13 +67,22 @@ class FaceRecognitionController extends Controller
                     ], 500);
                 }
 
+                // Extraer solo la porción JSON por si Python imprimió advertencias (warnings)
+                $firstBracket = strpos($output, '{');
+                if ($firstBracket !== false) {
+                    $jsonString = substr($output, $firstBracket);
+                } else {
+                    $jsonString = $output;
+                }
+
                 // Decodificar el JSON retornado por el script Python
-                $decoded = json_decode($output, true);
+                $decoded = json_decode(trim($jsonString), true);
                 if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
                     return response()->json([
                         'success' => false,
                         'code' => 'ERROR',
                         'message' => 'Error al ejecutar el script de Python.',
+                        'output_debug' => $output, // Lo enviamos al front temporalmente para ver la falla exacta
                         'data' => null
                     ], 500);
                 }

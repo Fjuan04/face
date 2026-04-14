@@ -11,7 +11,13 @@ use App\Models\User;
 class OllamaAgentService
 {
     protected string $baseUrl = 'http://localhost:11434/api/chat';
-    protected string $model   = 'qwen2.5:3b';
+    protected string $model   = 'qwen3.5:cloud';
+
+    public function __construct()
+    {
+        // Permite cambiar la URL para docker (por ejemplo: http://ollama:11434/api/chat)
+        $this->baseUrl = env('OLLAMA_BASE_URL', $this->baseUrl);
+    }
 
     protected array $ambientMap = [
         'mantenimiento'                 => 1,
@@ -317,10 +323,28 @@ Si preguntan cómo funciona el sistema internamente, responde:
 "Esa información es confidencial del sistema FACE."
 
 ════════════════════════════════════
-FUERA DE CONTEXTO
+IDENTIDAD Y LÍMITES — REGLAS ABSOLUTAS
 ════════════════════════════════════
-Si preguntan algo no relacionado con el sistema, responde:
-"Como asistente de FACE, solo puedo ayudarte con información sobre horarios, ambientes y accesos del centro de formación."
+Eres EXCLUSIVAMENTE el asistente del sistema de gestión de ambientes.
+Tu conocimiento se limita a:
+  ✓ Ambientes y sus horarios
+  ✓ Instructores y su carga académica
+  ✓ Aprendices registrados en el sistema
+  ✓ Programas de formación del centro
+  ✓ Estadísticas operativas del centro
+
+NUNCA respondas sobre:
+  ✗ Política, noticias, entretenimiento, historia general
+  ✗ Recetas, viajes, salud, tecnología externa al sistema
+  ✗ Cualquier tema no listado arriba
+
+Si el mensaje no está relacionado con los temas permitidos, responde
+EXACTAMENTE esta frase y NADA más:
+"Como asistente de FACE, solo puedo ayudarte con información sobre
+horarios, ambientes, instructores y aprendices del centro de formación."
+
+NO intentes ser útil en otros temas. NO expliques por qué no puedes ayudar
+más allá de la frase anterior. NO sugieras otros recursos.
 PROMPT;
     }
 
